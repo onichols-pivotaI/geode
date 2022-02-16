@@ -26,7 +26,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import org.apache.geode.CopyHelper;
-import org.apache.geode.cache.lucene.internal.LuceneServiceImpl;
 import org.apache.geode.cache.lucene.internal.distributed.TopEntriesCollectorManager.ListScanner;
 import org.apache.geode.cache.lucene.test.LuceneTestUtilities;
 import org.apache.geode.test.junit.categories.LuceneTest;
@@ -34,16 +33,16 @@ import org.apache.geode.test.junit.categories.LuceneTest;
 @Category({LuceneTest.class})
 public class TopEntriesCollectorJUnitTest {
 
-  private EntryScore<String> r1_1 = new EntryScore<>("1-1", .9f);
-  private EntryScore<String> r1_2 = new EntryScore<>("1-2", .7f);
-  private EntryScore<String> r1_3 = new EntryScore<>("1-3", .5f);
+  private final EntryScore<String> r1_1 = new EntryScore<>("1-1", .9f);
+  private final EntryScore<String> r1_2 = new EntryScore<>("1-2", .7f);
+  private final EntryScore<String> r1_3 = new EntryScore<>("1-3", .5f);
 
-  private EntryScore<String> r2_1 = new EntryScore<>("2-1", .85f);
-  private EntryScore<String> r2_2 = new EntryScore<>("2-2", .65f);
+  private final EntryScore<String> r2_1 = new EntryScore<>("2-1", .85f);
+  private final EntryScore<String> r2_2 = new EntryScore<>("2-2", .65f);
 
-  private EntryScore<String> r3_1 = new EntryScore<>("3-1", .8f);
-  private EntryScore<String> r3_2 = new EntryScore<>("3-2", .6f);
-  private EntryScore<String> r3_3 = new EntryScore<>("3-3", .4f);
+  private final EntryScore<String> r3_1 = new EntryScore<>("3-1", .8f);
+  private final EntryScore<String> r3_2 = new EntryScore<>("3-2", .6f);
+  private final EntryScore<String> r3_3 = new EntryScore<>("3-3", .4f);
 
   private TopEntriesCollectorManager manager;
 
@@ -95,7 +94,6 @@ public class TopEntriesCollectorJUnitTest {
 
   @Test
   public void testSerialization() {
-    LuceneServiceImpl.registerDataSerializables();
     TopEntriesCollectorManager manager = new TopEntriesCollectorManager("id", 213);
     TopEntriesCollectorManager copy = CopyHelper.deepCopy(manager);
     assertEquals("id", copy.getId());
@@ -104,7 +102,6 @@ public class TopEntriesCollectorJUnitTest {
 
   @Test
   public void testCollectorSerialization() {
-    LuceneServiceImpl.registerDataSerializables();
     TopEntriesCollector collector = new TopEntriesCollector("collector", 345);
     TopEntriesCollector copy = CopyHelper.deepCopy(collector);
     assertEquals("collector", copy.getName());

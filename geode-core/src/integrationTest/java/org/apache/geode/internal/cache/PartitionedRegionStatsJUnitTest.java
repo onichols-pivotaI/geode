@@ -170,7 +170,7 @@ public class PartitionedRegionStatsJUnitTest {
       try {
         pr.put(val, val);
       } catch (PartitionedRegionStorageException ex) {
-        this.logger.warn(ex);
+        logger.warn(ex);
       }
     }
     for (int i = 0; i < bucketMax + 1; i++) {
@@ -179,7 +179,7 @@ public class PartitionedRegionStatsJUnitTest {
         pr.get(val);
         totalGets++;
       } catch (PartitionedRegionStorageException ex) {
-        this.logger.warn(ex);
+        logger.warn(ex);
       }
     }
 
@@ -207,7 +207,7 @@ public class PartitionedRegionStatsJUnitTest {
       try {
         pr.create(key, val);
       } catch (PartitionedRegionStorageException ex) {
-        this.logger.warn(ex);
+        logger.warn(ex);
       }
     }
     for (int i = 200; i < 210; i++) {
@@ -216,7 +216,7 @@ public class PartitionedRegionStatsJUnitTest {
         pr.get(key);
         totalGets++;
       } catch (PartitionedRegionStorageException ex) {
-        this.logger.warn(ex);
+        logger.warn(ex);
       }
     }
 
@@ -227,7 +227,7 @@ public class PartitionedRegionStatsJUnitTest {
         // noinspection ResultOfMethodCallIgnored
         pr.containsKey(key);
       } catch (PartitionedRegionStorageException ex) {
-        this.logger.warn(ex);
+        logger.warn(ex);
       }
     }
 
@@ -236,7 +236,7 @@ public class PartitionedRegionStatsJUnitTest {
       try {
         pr.containsValueForKey(key);
       } catch (PartitionedRegionStorageException ex) {
-        this.logger.warn(ex);
+        logger.warn(ex);
       }
     }
 
@@ -245,7 +245,7 @@ public class PartitionedRegionStatsJUnitTest {
       try {
         pr.invalidate(key);
       } catch (PartitionedRegionStorageException ex) {
-        this.logger.warn(ex);
+        logger.warn(ex);
       }
     }
     int getsCompleted = stats.get("getsCompleted").intValue();

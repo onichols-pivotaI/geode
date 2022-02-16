@@ -57,6 +57,7 @@ org/apache/geode/internal/shared/TCPSocketOptions
 org/apache/geode/internal/statistics/platform/LinuxProcFsStatistics$CPU
 org/apache/geode/internal/tcp/VersionedByteBufferInputStream
 org/apache/geode/internal/util/concurrent/StoppableReadWriteLock
+org/apache/geode/internal/util/redaction/ParserRegex$Group
 org/apache/geode/logging/internal/LogMessageRegex$Group
 org/apache/geode/logging/internal/log4j/LogWriterLogger
 org/apache/geode/logging/internal/spi/LogLevelUpdateOccurs
@@ -102,3 +103,5 @@ org/apache/geode/cache/query/internal/xml/ElementType$1
 org/apache/geode/cache/query/internal/xml/ElementType$2
 org/apache/geode/cache/query/internal/xml/ElementType$3
 org/apache/geode/internal/net/ByteBufferVendor$OpenAttemptTimedOut
+org/apache/geode/internal/cache/wan/GatewaySenderEventImpl$TransactionMetadataDisposition
+org/apache/geode/internal/cache/tier/InterestType

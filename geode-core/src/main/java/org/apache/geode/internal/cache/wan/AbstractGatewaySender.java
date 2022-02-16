@@ -26,7 +26,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Predicate;
 
 import org.apache.logging.log4j.Logger;
 
@@ -128,7 +127,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
   protected boolean groupTransactionEvents;
 
-  protected volatile boolean isStopping = false;
+  protected int retriesToGetTransactionEventsFromQueue;
 
   protected boolean isForInternalUse;
 
@@ -176,7 +175,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
   protected AbstractGatewaySenderEventProcessor eventProcessor;
 
-  private org.apache.geode.internal.cache.GatewayEventFilter filter =
+  private final org.apache.geode.internal.cache.GatewayEventFilter filter =
       DefaultGatewayEventFilter.getInstance();
 
   private ServerLocation serverLocation;
@@ -197,14 +196,14 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
    */
   @MutableForTesting
   public static int MAXIMUM_SHUTDOWN_WAIT_TIME =
-      Integer.getInteger("GatewaySender.MAXIMUM_SHUTDOWN_WAIT_TIME", 0).intValue();
+      Integer.getInteger("GatewaySender.MAXIMUM_SHUTDOWN_WAIT_TIME", 0);
 
   public static final int QUEUE_SIZE_THRESHOLD =
-      Integer.getInteger("GatewaySender.QUEUE_SIZE_THRESHOLD", 5000).intValue();
+      Integer.getInteger("GatewaySender.QUEUE_SIZE_THRESHOLD", 5000);
 
   @MutableForTesting
   public static int TOKEN_TIMEOUT =
-      Integer.getInteger("GatewaySender.TOKEN_TIMEOUT", 120000).intValue();
+      Integer.getInteger("GatewaySender.TOKEN_TIMEOUT", 120000);
 
   /**
    * The name of the DistributedLockService used when accessing the GatewaySender's meta data
@@ -253,51 +252,51 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       GatewaySenderAttributes attrs) {
     this.cache = cache;
     this.statisticsClock = statisticsClock;
-    this.id = attrs.getId();
-    this.socketBufferSize = attrs.getSocketBufferSize();
-    this.socketReadTimeout = attrs.getSocketReadTimeout();
-    this.queueMemory = attrs.getMaximumQueueMemory();
-    this.batchSize = attrs.getBatchSize();
-    this.batchTimeInterval = attrs.getBatchTimeInterval();
-    this.isConflation = attrs.isBatchConflationEnabled();
-    this.isPersistence = attrs.isPersistenceEnabled();
-    this.alertThreshold = attrs.getAlertThreshold();
-    this.manualStart = attrs.isManualStart();
-    this.isParallel = attrs.isParallel();
-    this.groupTransactionEvents = attrs.mustGroupTransactionEvents();
-    this.isForInternalUse = attrs.isForInternalUse();
-    this.diskStoreName = attrs.getDiskStoreName();
-    this.remoteDSId = attrs.getRemoteDSId();
-    this.eventFilters = Collections.unmodifiableList(attrs.getGatewayEventFilters());
-    this.transFilters = Collections.unmodifiableList(attrs.getGatewayTransportFilters());
-    this.listeners = attrs.getAsyncEventListeners();
-    this.substitutionFilter = attrs.getGatewayEventSubstitutionFilter();
-    this.locatorDiscoveryCallback = attrs.getGatewayLocatoDiscoveryCallback();
-    this.isDiskSynchronous = attrs.isDiskSynchronous();
-    this.policy = attrs.getOrderPolicy();
-    this.dispatcherThreads = attrs.getDispatcherThreads();
-    this.parallelismForReplicatedRegion = attrs.getParallelismForReplicatedRegion();
+    id = attrs.getId();
+    socketBufferSize = attrs.getSocketBufferSize();
+    socketReadTimeout = attrs.getSocketReadTimeout();
+    queueMemory = attrs.getMaximumQueueMemory();
+    batchSize = attrs.getBatchSize();
+    batchTimeInterval = attrs.getBatchTimeInterval();
+    isConflation = attrs.isBatchConflationEnabled();
+    isPersistence = attrs.isPersistenceEnabled();
+    alertThreshold = attrs.getAlertThreshold();
+    manualStart = attrs.isManualStart();
+    isParallel = attrs.isParallel();
+    groupTransactionEvents = attrs.mustGroupTransactionEvents();
+    retriesToGetTransactionEventsFromQueue = attrs.getRetriesToGetTransactionEventsFromQueue();
+    isForInternalUse = attrs.isForInternalUse();
+    diskStoreName = attrs.getDiskStoreName();
+    remoteDSId = attrs.getRemoteDSId();
+    eventFilters = Collections.unmodifiableList(attrs.getGatewayEventFilters());
+    transFilters = Collections.unmodifiableList(attrs.getGatewayTransportFilters());
+    listeners = attrs.getAsyncEventListeners();
+    substitutionFilter = attrs.getGatewayEventSubstitutionFilter();
+    locatorDiscoveryCallback = attrs.getGatewayLocatoDiscoveryCallback();
+    isDiskSynchronous = attrs.isDiskSynchronous();
+    policy = attrs.getOrderPolicy();
+    dispatcherThreads = attrs.getDispatcherThreads();
+    parallelismForReplicatedRegion = attrs.getParallelismForReplicatedRegion();
     // divide the maximumQueueMemory of sender equally using number of dispatcher threads.
     // if dispatcherThreads is 1 then maxMemoryPerDispatcherQueue will be same as maximumQueueMemory
     // of sender
-    this.maxMemoryPerDispatcherQueue = this.queueMemory / this.dispatcherThreads;
-    this.serialNumber = DistributionAdvisor.createSerialNumber();
-    this.isMetaQueue = attrs.isMetaQueue();
-    this.enforceThreadsConnectSameReceiver = attrs.getEnforceThreadsConnectSameReceiver();
-    if (!(this.cache instanceof CacheCreation)) {
-      this.myDSId = this.cache.getInternalDistributedSystem().getDistributionManager()
+    maxMemoryPerDispatcherQueue = queueMemory / dispatcherThreads;
+    serialNumber = DistributionAdvisor.createSerialNumber();
+    isMetaQueue = attrs.isMetaQueue();
+    enforceThreadsConnectSameReceiver = attrs.getEnforceThreadsConnectSameReceiver();
+    if (!(cache instanceof CacheCreation)) {
+      myDSId = cache.getInternalDistributedSystem().getDistributionManager()
           .getDistributedSystemId();
-      this.stopper = new Stopper(cache.getCancelCriterion());
-      this.senderAdvisor = GatewaySenderAdvisor.createGatewaySenderAdvisor(this);
-      if (!this.isForInternalUse()) {
-        this.statistics = new GatewaySenderStats(cache.getDistributedSystem(),
+      stopper = new Stopper(cache.getCancelCriterion());
+      senderAdvisor = GatewaySenderAdvisor.createGatewaySenderAdvisor(this);
+      if (!isForInternalUse()) {
+        statistics = new GatewaySenderStats(cache.getDistributedSystem(),
             "gatewaySenderStats-", id, statisticsClock);
       }
       initializeEventIdIndex();
     }
-    this.isBucketSorted = attrs.isBucketSorted();
-    this.forwardExpirationDestroy = attrs.isForwardExpirationDestroy();
-    this.partitionedRegionClearUnsupported = attrs.isPartitionedRegionClearUnsupported();
+    isBucketSorted = attrs.isBucketSorted();
+    forwardExpirationDestroy = attrs.isForwardExpirationDestroy();
   }
 
   public GatewaySenderAdvisor getSenderAdvisor() {
@@ -320,78 +319,83 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
   @Override
   public boolean isPrimary() {
-    return this.getSenderAdvisor().isPrimary();
+    return getSenderAdvisor().isPrimary();
   }
 
   public void setIsPrimary(boolean isPrimary) {
-    this.getSenderAdvisor().setIsPrimary(isPrimary);
+    getSenderAdvisor().setIsPrimary(isPrimary);
   }
 
   @Override
   public InternalCache getCache() {
-    return this.cache;
+    return cache;
   }
 
   @Override
   public int getAlertThreshold() {
-    return this.alertThreshold;
+    return alertThreshold;
   }
 
   @Override
   public int getBatchSize() {
-    return this.batchSize;
+    return batchSize;
   }
 
   @Override
   public int getBatchTimeInterval() {
-    return this.batchTimeInterval;
+    return batchTimeInterval;
   }
 
   @Override
   public String getDiskStoreName() {
-    return this.diskStoreName;
+    return diskStoreName;
   }
 
   @Override
   public List<GatewayEventFilter> getGatewayEventFilters() {
-    return this.eventFilters;
+    return eventFilters;
   }
 
   @Override
   public GatewayEventSubstitutionFilter getGatewayEventSubstitutionFilter() {
-    return this.substitutionFilter;
+    return substitutionFilter;
   }
 
   @Override
   public String getId() {
-    return this.id;
+    return id;
   }
 
   public long getStartTime() {
-    return this.startTime;
+    return startTime;
   }
 
   @Override
   public int getRemoteDSId() {
-    return this.remoteDSId;
+    return remoteDSId;
   }
 
   @Override
   public List<GatewayTransportFilter> getGatewayTransportFilters() {
-    return this.transFilters;
+    return transFilters;
   }
 
   public List<AsyncEventListener> getAsyncEventListeners() {
-    return this.listeners;
+    return listeners;
   }
 
   public boolean hasListeners() {
-    return !this.listeners.isEmpty();
+    return !listeners.isEmpty();
   }
 
   @Override
   public boolean isForwardExpirationDestroy() {
-    return this.forwardExpirationDestroy;
+    return forwardExpirationDestroy;
+  }
+
+  @Override
+  public boolean isPartitionedRegionClearUnsupported() {
+    return this.partitionedRegionClearUnsupported;
   }
 
   @Override
@@ -401,59 +405,59 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
   @Override
   public boolean isManualStart() {
-    return this.manualStart;
+    return manualStart;
   }
 
   @Override
   public int getMaximumQueueMemory() {
-    return this.queueMemory;
+    return queueMemory;
   }
 
   public int getMaximumMemeoryPerDispatcherQueue() {
-    return this.maxMemoryPerDispatcherQueue;
+    return maxMemoryPerDispatcherQueue;
   }
 
   @Override
   public int getSocketBufferSize() {
-    return this.socketBufferSize;
+    return socketBufferSize;
   }
 
   @Override
   public int getSocketReadTimeout() {
-    return this.socketReadTimeout;
+    return socketReadTimeout;
   }
 
   @Override
   public boolean isBatchConflationEnabled() {
-    return this.isConflation;
+    return isConflation;
   }
 
   public void test_setBatchConflationEnabled(boolean enableConflation) {
-    this.isConflation = enableConflation;
+    isConflation = enableConflation;
   }
 
   @Override
   public boolean isPersistenceEnabled() {
-    return this.isPersistence;
+    return isPersistence;
   }
 
   @Override
   public boolean isDiskSynchronous() {
-    return this.isDiskSynchronous;
+    return isDiskSynchronous;
   }
 
   @Override
   public int getMaxParallelismForReplicatedRegion() {
-    return this.parallelismForReplicatedRegion;
+    return parallelismForReplicatedRegion;
   }
 
   public LocatorDiscoveryCallback getLocatorDiscoveryCallback() {
-    return this.locatorDiscoveryCallback;
+    return locatorDiscoveryCallback;
   }
 
   @Override
   public DistributionAdvisor getDistributionAdvisor() {
-    return this.senderAdvisor;
+    return senderAdvisor;
   }
 
   @Override
@@ -478,45 +482,45 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
   @Override
   public int getDispatcherThreads() {
-    return this.dispatcherThreads;
+    return dispatcherThreads;
   }
 
   @Override
   public OrderPolicy getOrderPolicy() {
-    return this.policy;
+    return policy;
   }
 
   @Override
   public Profile getProfile() {
-    return this.senderAdvisor.createProfile();
+    return senderAdvisor.createProfile();
   }
 
   @Override
   public int getSerialNumber() {
-    return this.serialNumber;
+    return serialNumber;
   }
 
   public boolean getBucketSorted() {
-    return this.isBucketSorted;
+    return isBucketSorted;
   }
 
   @Override
   public boolean getIsMetaQueue() {
-    return this.isMetaQueue;
+    return isMetaQueue;
   }
 
   @Override
   public InternalDistributedSystem getSystem() {
-    return this.cache.getInternalDistributedSystem();
+    return cache.getInternalDistributedSystem();
   }
 
   public int getEventIdIndex() {
-    return this.eventIdIndex;
+    return eventIdIndex;
   }
 
   @Override
   public boolean getEnforceThreadsConnectSameReceiver() {
-    return this.enforceThreadsConnectSameReceiver;
+    return enforceThreadsConnectSameReceiver;
   }
 
   @Override
@@ -531,15 +535,12 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       return false;
     }
     AbstractGatewaySender sender = (AbstractGatewaySender) obj;
-    if (sender.getId().equals(this.getId())) {
-      return true;
-    }
-    return false;
+    return sender.getId().equals(getId());
   }
 
   @Override
   public int hashCode() {
-    return this.getId().hashCode();
+    return getId().hashCode();
   }
 
   public PoolImpl getProxy() {
@@ -551,12 +552,12 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
     if (filter == null) {
       return;
     }
-    if (this.eventFilters.isEmpty()) {
+    if (eventFilters.isEmpty()) {
       return;
     }
-    List<GatewayEventFilter> templist = new ArrayList<>(this.eventFilters);
+    List<GatewayEventFilter> templist = new ArrayList<>(eventFilters);
     templist.remove(filter);
-    this.eventFilters = Collections.unmodifiableList(templist);
+    eventFilters = Collections.unmodifiableList(templist);
   }
 
   @Override
@@ -565,23 +566,33 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       throw new IllegalStateException(
           "null value can not be added to gateway-event-filters list");
     }
-    List<GatewayEventFilter> templist = new ArrayList<>(this.eventFilters);
+    List<GatewayEventFilter> templist = new ArrayList<>(eventFilters);
     templist.add(filter);
-    this.eventFilters = Collections.unmodifiableList(templist);
+    eventFilters = Collections.unmodifiableList(templist);
   }
 
   @Override
   public boolean isParallel() {
-    return this.isParallel;
+    return isParallel;
   }
 
   @Override
   public boolean mustGroupTransactionEvents() {
-    return this.groupTransactionEvents;
+    return groupTransactionEvents;
+  }
+
+  /**
+   * Returns retriesToGetTransactionEventsFromQueue int property for this GatewaySender.
+   *
+   * @return retriesToGetTransactionEventsFromQueue int property for this GatewaySender
+   *
+   */
+  public int getRetriesToGetTransactionEventsFromQueue() {
+    return retriesToGetTransactionEventsFromQueue;
   }
 
   public boolean isForInternalUse() {
-    return this.isForInternalUse;
+    return isForInternalUse;
   }
 
   @Override
@@ -612,15 +623,14 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   @Override
   public void destroy(boolean initiator) {
     try {
-      this.getLifeCycleLock().writeLock().lock();
+      getLifeCycleLock().writeLock().lock();
       // first, check if this sender is attached to any region. If so, throw
       // GatewaySenderException
-      Set<InternalRegion> regions = this.cache.getApplicationRegions();
-      Iterator regionItr = regions.iterator();
-      while (regionItr.hasNext()) {
-        LocalRegion region = (LocalRegion) regionItr.next();
+      Set<InternalRegion> regions = cache.getApplicationRegions();
+      for (final InternalRegion internalRegion : regions) {
+        LocalRegion region = (LocalRegion) internalRegion;
 
-        if (region.getAttributes().getGatewaySenderIds().contains(this.id)) {
+        if (region.getAttributes().getGatewaySenderIds().contains(id)) {
           throw new GatewaySenderException(
               String.format(
                   "The GatewaySender %s could not be destroyed as it is still used by region(s).",
@@ -628,7 +638,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         }
       }
       // close the GatewaySenderAdvisor
-      GatewaySenderAdvisor advisor = this.getSenderAdvisor();
+      GatewaySenderAdvisor advisor = getSenderAdvisor();
       if (advisor != null) {
         if (logger.isDebugEnabled()) {
           logger.debug("Stopping the GatewaySender advisor");
@@ -637,7 +647,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       }
 
       // remove the sender from the cache
-      this.cache.removeGatewaySender(this);
+      cache.removeGatewaySender(this);
 
       // destroy the region underneath the sender's queue
       if (initiator) {
@@ -662,7 +672,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
               // the region might have already been destroyed by other node. Just
               // log
               // the exception.
-              this.logger.info(
+              logger.info(
                   "Region {} that underlies the GatewaySender {} is already destroyed.",
                   e.getRegionFullPath(), this);
             }
@@ -670,7 +680,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         } // END if (regionQueues != null)
       }
     } finally {
-      this.getLifeCycleLock().writeLock().unlock();
+      getLifeCycleLock().writeLock().unlock();
     }
   }
 
@@ -681,8 +691,8 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       pause();
 
       // Rebalance the event processor if necessary
-      if (this.eventProcessor != null) {
-        this.eventProcessor.rebalance();
+      if (eventProcessor != null) {
+        eventProcessor.rebalance();
       }
     } finally {
       // Resume the sender
@@ -692,40 +702,80 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         "GatewaySender {} has been rebalanced", this);
   }
 
-  @Override
+  /**
+   * Set AlertThreshold for this GatewaySender.
+   *
+   * Care must be taken to set this consistently across all gateway senders in the cluster and only
+   * when safe to do so.
+   *
+   * @since Geode 1.15
+   *
+   */
   public void setAlertThreshold(int alertThreshold) {
     this.alertThreshold = alertThreshold;
-  };
+  }
 
-  @Override
+  /**
+   * Set BatchSize for this GatewaySender.
+   *
+   * Care must be taken to set this consistently across all gateway senders in the cluster and only
+   * when safe to do so.
+   *
+   * @since Geode 1.15
+   *
+   */
   public void setBatchSize(int batchSize) {
     this.batchSize = batchSize;
-    if (this.eventProcessor != null) {
-      this.eventProcessor.setBatchSize(this.batchSize);
+    if (eventProcessor != null) {
+      eventProcessor.setBatchSize(batchSize);
     }
-  };
+  }
 
-  @Override
+  /**
+   * Set BatchTimeInterval for this GatewaySender.
+   *
+   * Care must be taken to set this consistently across all gateway senders in the cluster and only
+   * when safe to do so.
+   *
+   * @since Geode 1.15
+   *
+   */
   public void setBatchTimeInterval(int batchTimeInterval) {
     this.batchTimeInterval = batchTimeInterval;
-    if (this.eventProcessor != null) {
-      this.eventProcessor.setBatchTimeInterval(this.batchTimeInterval);
+    if (eventProcessor != null) {
+      eventProcessor.setBatchTimeInterval(batchTimeInterval);
     }
-  };
+  }
 
-  @Override
+  /**
+   * Set GroupTransactionEvents for this GatewaySender.
+   *
+   * Care must be taken to set this consistently across all gateway senders in the cluster and only
+   * when safe to do so.
+   *
+   * @since Geode 1.15
+   *
+   */
   public void setGroupTransactionEvents(boolean groupTransactionEvents) {
     this.groupTransactionEvents = groupTransactionEvents;
-  };
+  }
 
-  @Override
+  /**
+   * Set GatewayEventFilters for this GatewaySender.
+   *
+   * Care must be taken to set this consistently across all gateway senders in the cluster and only
+   * when safe to do so.
+   *
+   * @since Geode 1.15
+   *
+   */
   public void setGatewayEventFilters(List<GatewayEventFilter> filters) {
     if (filters.isEmpty()) {
-      this.eventFilters = Collections.emptyList();
+      eventFilters = Collections.emptyList();
     } else {
-      this.eventFilters = Collections.unmodifiableList(filters);
+      eventFilters = Collections.unmodifiableList(filters);
     }
-  };
+  }
 
   public boolean beforeEnqueue(GatewayQueueEvent gatewayEvent) {
     boolean enqueue = true;
@@ -738,24 +788,9 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
     return enqueue;
   }
 
-  protected void preStop() {
-    isStopping = true;
-    if (mustGroupTransactionEvents()) {
-      try {
-        Thread.sleep(TIME_TO_COMPLETE_TRANSACTIONS_BEFORE_STOP_MS);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
-    }
-  }
-
-  protected void postStop() {
-    isStopping = false;
-  }
-
   protected void stopProcessing() {
     // Stop the dispatcher
-    AbstractGatewaySenderEventProcessor ev = this.eventProcessor;
+    AbstractGatewaySenderEventProcessor ev = eventProcessor;
     if (ev != null && !ev.isStopped()) {
       ev.stopProcessing();
     }
@@ -766,15 +801,12 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   protected void stompProxyDead() {
-    Runnable stomper = new Runnable() {
-      @Override
-      public void run() {
-        PoolImpl bpi = proxy;
-        if (bpi != null) {
-          try {
-            bpi.destroy();
-          } catch (Exception e) {/* ignore */
-          }
+    Runnable stomper = () -> {
+      PoolImpl bpi = proxy;
+      if (bpi != null) {
+        try {
+          bpi.destroy();
+        } catch (Exception e) {/* ignore */
         }
       }
     };
@@ -792,11 +824,11 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
     // violence.
     t.interrupt(); // give up
     proxy.emergencyClose(); // VIOLENCE!
-    this.proxy = null;
+    proxy = null;
   }
 
   public int getMyDSId() {
-    return this.myDSId;
+    return myDSId;
   }
 
   /**
@@ -814,7 +846,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   public CancelCriterion getStopper() {
-    return this.stopper;
+    return stopper;
   }
 
   @Override
@@ -827,7 +859,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   public synchronized boolean setServerLocation(ServerLocation location) {
-    this.serverLocation = location;
+    serverLocation = location;
     return true;
   }
 
@@ -835,7 +867,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
     final CancelCriterion stper;
 
     Stopper(CancelCriterion stopper) {
-      this.stper = stopper;
+      stper = stopper;
     }
 
     @Override
@@ -852,9 +884,9 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   public RegionQueue getQueue() {
-    if (this.eventProcessor != null) {
-      if (!(this.eventProcessor instanceof ConcurrentSerialGatewaySenderEventProcessor)) {
-        return this.eventProcessor.getQueue();
+    if (eventProcessor != null) {
+      if (!(eventProcessor instanceof ConcurrentSerialGatewaySenderEventProcessor)) {
+        return eventProcessor.getQueue();
       } else {
         throw new IllegalArgumentException("getQueue() for concurrent serial gateway sender");
       }
@@ -864,31 +896,31 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
   @Override
   public Set<RegionQueue> getQueues() {
-    if (this.eventProcessor != null) {
-      if (!(this.eventProcessor instanceof ConcurrentSerialGatewaySenderEventProcessor)) {
-        Set<RegionQueue> queues = new HashSet<RegionQueue>();
-        queues.add(this.eventProcessor.getQueue());
+    if (eventProcessor != null) {
+      if (!(eventProcessor instanceof ConcurrentSerialGatewaySenderEventProcessor)) {
+        Set<RegionQueue> queues = new HashSet<>();
+        queues.add(eventProcessor.getQueue());
         return queues;
       }
-      return ((ConcurrentSerialGatewaySenderEventProcessor) this.eventProcessor).getQueues();
+      return ((ConcurrentSerialGatewaySenderEventProcessor) eventProcessor).getQueues();
     }
     return null;
   }
 
   protected void waitForRunningStatus() {
-    synchronized (this.eventProcessor.getRunningStateLock()) {
-      while (this.eventProcessor.getException() == null && this.eventProcessor.isStopped()) {
+    synchronized (eventProcessor.getRunningStateLock()) {
+      while (eventProcessor.getException() == null && eventProcessor.isStopped()) {
         try {
-          this.eventProcessor.getRunningStateLock().wait(1000);
+          eventProcessor.getRunningStateLock().wait(1000);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         }
       }
-      Exception ex = this.eventProcessor.getException();
+      Exception ex = eventProcessor.getException();
       if (ex != null) {
         throw new GatewaySenderException(
             String.format("Could not start a gateway sender %s because of exception %s",
-                new Object[] {this.getId(), ex.getMessage()}),
+                getId(), ex.getMessage()),
             ex.getCause());
       }
     }
@@ -908,88 +940,88 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
    * processor has not yet started.
    */
   public void pauseEvenIfProcessorStopped() {
-    if (this.eventProcessor != null) {
-      this.getLifeCycleLock().writeLock().lock();
+    if (eventProcessor != null) {
+      getLifeCycleLock().writeLock().lock();
       try {
-        this.eventProcessor.pauseDispatching();
+        eventProcessor.pauseDispatching();
         InternalDistributedSystem system =
-            (InternalDistributedSystem) this.cache.getDistributedSystem();
+            (InternalDistributedSystem) cache.getDistributedSystem();
         system.handleResourceEvent(ResourceEvent.GATEWAYSENDER_PAUSE, this);
         logger.info("Paused {}", this);
 
         enqueueTempEvents();
       } finally {
-        this.getLifeCycleLock().writeLock().unlock();
+        getLifeCycleLock().writeLock().unlock();
       }
     }
   }
 
   @Override
   public void pause() {
-    if (this.eventProcessor != null) {
-      this.getLifeCycleLock().writeLock().lock();
+    if (eventProcessor != null) {
+      getLifeCycleLock().writeLock().lock();
       try {
-        if (this.eventProcessor.isStopped()) {
+        if (eventProcessor.isStopped()) {
           return;
         }
-        this.eventProcessor.pauseDispatching();
+        eventProcessor.pauseDispatching();
 
         InternalDistributedSystem system =
-            (InternalDistributedSystem) this.cache.getDistributedSystem();
+            (InternalDistributedSystem) cache.getDistributedSystem();
         system.handleResourceEvent(ResourceEvent.GATEWAYSENDER_PAUSE, this);
 
         logger.info("Paused {}", this);
 
         enqueueTempEvents();
       } finally {
-        this.getLifeCycleLock().writeLock().unlock();
+        getLifeCycleLock().writeLock().unlock();
       }
     }
   }
 
   @Override
   public void resume() {
-    if (this.eventProcessor != null) {
-      this.getLifeCycleLock().writeLock().lock();
+    if (eventProcessor != null) {
+      getLifeCycleLock().writeLock().lock();
       try {
-        if (this.eventProcessor.isStopped()) {
+        if (eventProcessor.isStopped()) {
           return;
         }
-        this.eventProcessor.resumeDispatching();
+        eventProcessor.resumeDispatching();
 
 
         InternalDistributedSystem system =
-            (InternalDistributedSystem) this.cache.getDistributedSystem();
+            (InternalDistributedSystem) cache.getDistributedSystem();
         system.handleResourceEvent(ResourceEvent.GATEWAYSENDER_RESUME, this);
 
         logger.info("Resumed {}", this);
 
         enqueueTempEvents();
       } finally {
-        this.getLifeCycleLock().writeLock().unlock();
+        getLifeCycleLock().writeLock().unlock();
       }
     }
   }
 
   @Override
   public boolean isPaused() {
-    if (this.eventProcessor != null) {
-      return this.eventProcessor.isPaused();
+    if (eventProcessor != null) {
+      return eventProcessor.isPaused();
     }
     return false;
   }
 
   @Override
   public boolean isRunning() {
-    if (this.eventProcessor != null) {
-      return !this.eventProcessor.isStopped();
+    if (eventProcessor != null) {
+      return !eventProcessor.isStopped();
     }
     return false;
   }
 
   @Override
   public AbstractGatewaySenderEventProcessor getEventProcessor() {
-    return this.eventProcessor;
+    return eventProcessor;
   }
 
   /**
@@ -1004,11 +1036,8 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
     // Check for eviction and expiration events.
     if (event.getOperation().isLocal() || event.getOperation().isExpiration()) {
       // Check if its AEQ and is configured to forward expiration destroy events.
-      if (event.getOperation().isExpiration() && this.isAsyncEventQueue()
-          && this.isForwardExpirationDestroy()) {
-        return true;
-      }
-      return false;
+      return event.getOperation().isExpiration() && isAsyncEventQueue()
+          && isForwardExpirationDestroy();
     }
     return true;
   }
@@ -1040,7 +1069,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       // this filter is defined by Asif which exist in old wan too. new wan has
       // other GatewaEventFilter. Do we need to get rid of this filter. Cheetah is
       // not considering this filter
-      if (!this.filter.enqueueEvent(event)) {
+      if (!filter.enqueueEvent(event)) {
         stats.incEventsFiltered();
         return;
       }
@@ -1054,7 +1083,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         // call getNewValue.
         // event.getNewValue(); // to deserialize the value if necessary
         logger.debug("{} : About to notify {} to perform operation {} for {} callback arg {}",
-            this.isPrimary(), getId(), operation, clonedEvent, callbackArg);
+            isPrimary(), getId(), operation, clonedEvent, callbackArg);
       }
 
       if (callbackArg instanceof GatewaySenderEventCallbackArgument) {
@@ -1062,18 +1091,18 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         if (isDebugEnabled) {
           logger.debug(
               "{}: Event originated in {}. My DS id is {}. The remote DS id is {}. The recipients are: {}",
-              this, seca.getOriginatingDSId(), this.getMyDSId(), this.getRemoteDSId(),
+              this, seca.getOriginatingDSId(), getMyDSId(), getRemoteDSId(),
               seca.getRecipientDSIds());
         }
         if (seca.getOriginatingDSId() == DEFAULT_DISTRIBUTED_SYSTEM_ID) {
           if (isDebugEnabled) {
             logger.debug(
                 "{}: Event originated in {}. My DS id is {}. The remote DS id is {}. The recipients are: {}",
-                this, seca.getOriginatingDSId(), this.getMyDSId(), this.getRemoteDSId(),
+                this, seca.getOriginatingDSId(), getMyDSId(), getRemoteDSId(),
                 seca.getRecipientDSIds());
           }
 
-          seca.setOriginatingDSId(this.getMyDSId());
+          seca.setOriginatingDSId(getMyDSId());
           seca.initializeReceipientDSIds(allRemoteDSIds);
 
         } else {
@@ -1083,18 +1112,18 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
           AbstractGatewaySenderEventProcessor ep = getEventProcessor();
           // if manual-start is true, ep is null
           if (ep == null || !(ep.getDispatcher() instanceof GatewaySenderEventCallbackDispatcher)) {
-            if (seca.getOriginatingDSId() == this.getRemoteDSId()) {
+            if (seca.getOriginatingDSId() == getRemoteDSId()) {
               if (isDebugEnabled) {
                 logger.debug(
                     "{}: Event originated in {}. My DS id is {}. It is being dropped as remote is originator.",
                     this, seca.getOriginatingDSId(), getMyDSId());
               }
               return;
-            } else if (seca.getRecipientDSIds().contains(this.getRemoteDSId())) {
+            } else if (seca.getRecipientDSIds().contains(getRemoteDSId())) {
               if (isDebugEnabled) {
                 logger.debug(
                     "{}: Event originated in {}. My DS id is {}. The remote DS id is {}.. It is being dropped as remote ds is already a recipient. Recipients are: {}",
-                    this, seca.getOriginatingDSId(), getMyDSId(), this.getRemoteDSId(),
+                    this, seca.getOriginatingDSId(), getMyDSId(), getRemoteDSId(),
                     seca.getRecipientDSIds());
               }
               return;
@@ -1104,21 +1133,27 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         }
       } else {
         GatewaySenderEventCallbackArgument geCallbackArg =
-            new GatewaySenderEventCallbackArgument(callbackArg, this.getMyDSId(), allRemoteDSIds);
+            new GatewaySenderEventCallbackArgument(callbackArg, getMyDSId(), allRemoteDSIds);
         clonedEvent.setCallbackArgument(geCallbackArg);
       }
 
+      // If this gateway is not running, return
       if (!isRunning()) {
-        recordDroppedEvent(clonedEvent);
+        if (isPrimary()) {
+          recordDroppedEvent(clonedEvent);
+        }
+        if (isDebugEnabled) {
+          logger.debug("Returning back without putting into the gateway sender queue:" + event);
+        }
         return;
       }
 
-      if (!this.getLifeCycleLock().readLock().tryLock()) {
-        synchronized (this.queuedEventsSync) {
-          if (!this.enqueuedAllTempQueueEvents) {
-            if (!this.getLifeCycleLock().readLock().tryLock()) {
+      if (!getLifeCycleLock().readLock().tryLock()) {
+        synchronized (queuedEventsSync) {
+          if (!enqueuedAllTempQueueEvents) {
+            if (!getLifeCycleLock().readLock().tryLock()) {
               Object substituteValue = getSubstituteValue(clonedEvent, operation);
-              this.tmpQueuedEvents.add(new TmpQueueEvent(operation, clonedEvent, substituteValue));
+              tmpQueuedEvents.add(new TmpQueueEvent(operation, clonedEvent, substituteValue));
               freeClonedEvent = false;
               stats.incTempQueueSize();
               if (isDebugEnabled) {
@@ -1128,23 +1163,28 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
             }
           }
         }
-        if (this.enqueuedAllTempQueueEvents) {
-          this.getLifeCycleLock().readLock().lock();
+        if (enqueuedAllTempQueueEvents) {
+          getLifeCycleLock().readLock().lock();
         }
       }
       try {
         // If this gateway is not running, return
         // The sender may have stopped, after we have checked the status in the beginning.
         if (!isRunning()) {
-          recordDroppedEvent(clonedEvent);
+          if (isDebugEnabled) {
+            logger.debug("Returning back without putting into the gateway sender queue:" + event);
+          }
+          if (isPrimary()) {
+            recordDroppedEvent(clonedEvent);
+          }
           return;
         }
 
         try {
-          AbstractGatewaySenderEventProcessor ev = this.eventProcessor;
+          AbstractGatewaySenderEventProcessor ev = eventProcessor;
           if (ev == null) {
             getStopper().checkCancelInProgress(null);
-            this.getCache().getDistributedSystem().getCancelCriterion().checkCancelInProgress(null);
+            getCache().getDistributedSystem().getCancelCriterion().checkCancelInProgress(null);
             // event processor will be null if there was an authorization
             // problem
             // connecting to the other site (bug #40681)
@@ -1156,37 +1196,23 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
           // Get substitution value to enqueue if necessary
           Object substituteValue = getSubstituteValue(clonedEvent, operation);
 
-          Predicate<InternalGatewayQueueEvent> hasSameTransactionIdPredicate = null;
-          // In case the sender is about to be stopped, the event will only
-          // be queued if there is any event in the queue with the same
-          // transactionId as the one of this event
-          if (isStopping && mustGroupTransactionEvents()
-              && clonedEvent.getTransactionId() != null) {
-            hasSameTransactionIdPredicate =
-                x -> x != null && clonedEvent.getTransactionId() != null
-                    && clonedEvent.getTransactionId()
-                        .equals((x).getTransactionId());
-          }
-          if (!ev.enqueueEvent(operation, clonedEvent, substituteValue, isLastEventInTransaction,
-              hasSameTransactionIdPredicate)) {
-            recordDroppedEvent(event);
-          }
+          ev.enqueueEvent(operation, clonedEvent, substituteValue, isLastEventInTransaction);
         } catch (CancelException e) {
           logger.debug("caught cancel exception", e);
           throw e;
         } catch (RegionDestroyedException e) {
           logger.warn(String.format(
               "%s: An Exception occurred while queueing %s to perform operation %s for %s",
-              new Object[] {this, getId(), operation, clonedEvent}),
+              this, getId(), operation, clonedEvent),
               e);
         } catch (Exception e) {
           logger.fatal(String.format(
               "%s: An Exception occurred while queueing %s to perform operation %s for %s",
-              new Object[] {this, getId(), operation, clonedEvent}),
+              this, getId(), operation, clonedEvent),
               e);
         }
       } finally {
-        this.getLifeCycleLock().readLock().unlock();
+        getLifeCycleLock().readLock().unlock();
       }
     } finally {
       if (freeClonedEvent) {
@@ -1196,19 +1222,13 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   private void recordDroppedEvent(EntryEventImpl event) {
-    if (!this.isPrimary()) {
-      return;
-    }
-    if (this.eventProcessor != null) {
-      this.eventProcessor.registerEventDroppedInPrimaryQueue(event);
+    if (eventProcessor != null) {
+      eventProcessor.registerEventDroppedInPrimaryQueue(event);
     } else {
       tmpDroppedEvents.add(event);
       if (logger.isDebugEnabled()) {
         logger.debug("added to tmpDroppedEvents event: {}", event);
       }
-    }
-    if (logger.isDebugEnabled()) {
-      logger.debug("Returning without putting into the gateway sender queue:" + event);
     }
   }
 
@@ -1230,11 +1250,11 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
    * ParallelGatewaySenderQueue.addPartitionedRegionForRegion
    */
   public void enqueueTempEvents() {
-    if (this.eventProcessor != null) {// Fix for defect #47308
+    if (eventProcessor != null) {// Fix for defect #47308
       // process tmpDroppedEvents
       EntryEventImpl droppedEvent;
       while ((droppedEvent = tmpDroppedEvents.poll()) != null) {
-        this.eventProcessor.registerEventDroppedInPrimaryQueue(droppedEvent);
+        eventProcessor.registerEventDroppedInPrimaryQueue(droppedEvent);
       }
 
       TmpQueueEvent nextEvent = null;
@@ -1242,7 +1262,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       try {
         // Now finish emptying the queue with synchronization to make
         // sure we don't miss any events.
-        synchronized (this.queuedEventsSync) {
+        synchronized (queuedEventsSync) {
           while ((nextEvent = tmpQueuedEvents.poll()) != null) {
             try {
               if (logger.isDebugEnabled()) {
@@ -1250,20 +1270,20 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
                     nextEvent);
               }
               stats.decTempQueueSize();
-              this.eventProcessor.enqueueEvent(nextEvent.getOperation(), nextEvent.getEvent(),
+              eventProcessor.enqueueEvent(nextEvent.getOperation(), nextEvent.getEvent(),
                   nextEvent.getSubstituteValue());
             } finally {
               nextEvent.release();
             }
           }
-          this.enqueuedAllTempQueueEvents = true;
+          enqueuedAllTempQueueEvents = true;
         }
       } catch (CacheException e) {
         logger.debug("caught cancel exception", e);
       } catch (IOException e) {
         logger.fatal(String.format(
             "%s: An Exception occurred while queueing %s to perform operation %s for %s",
-            new Object[] {this, getId(), nextEvent.getOperation(), nextEvent}),
+            this, getId(), nextEvent.getOperation(), nextEvent),
             e);
       }
     }
@@ -1275,8 +1295,8 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
    *
    */
   public boolean removeFromTempQueueEvents(Object tailKey) {
-    synchronized (this.queuedEventsSync) {
-      Iterator<TmpQueueEvent> itr = this.tmpQueuedEvents.iterator();
+    synchronized (queuedEventsSync) {
+      Iterator<TmpQueueEvent> itr = tmpQueuedEvents.iterator();
       while (itr.hasNext()) {
         TmpQueueEvent event = itr.next();
         if (tailKey.equals(event.getEvent().getTailKey())) {
@@ -1304,11 +1324,11 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
     while ((nextEvent = tmpQueuedEvents.poll()) != null) {
       nextEvent.release();
     }
-    synchronized (this.queuedEventsSync) {
+    synchronized (queuedEventsSync) {
       while ((nextEvent = tmpQueuedEvents.poll()) != null) {
         nextEvent.release();
       }
-      this.enqueuedAllTempQueueEvents = false;
+      enqueuedAllTempQueueEvents = false;
     }
 
     statistics.setQueueSize(0);
@@ -1320,9 +1340,9 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   public Object getSubstituteValue(EntryEventImpl clonedEvent, EnumListenerEvent operation) {
     // Get substitution value to enqueue if necessary
     Object substituteValue = null;
-    if (this.substitutionFilter != null) {
+    if (substitutionFilter != null) {
       try {
-        substituteValue = this.substitutionFilter.getSubstituteValue(clonedEvent);
+        substituteValue = substitutionFilter.getSubstituteValue(clonedEvent);
         // If null is returned from the filter, null is set in the value
         if (substituteValue == null) {
           substituteValue = GatewaySenderEventImpl.TOKEN_NULL;
@@ -1331,7 +1351,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         // Log any exceptions that occur in the filter and use the original value.
         logger.warn(String.format(
             "%s: An Exception occurred while queueing %s to perform operation %s for %s",
-            new Object[] {this, getId(), operation, clonedEvent}),
+            this, getId(), operation, clonedEvent),
             e);
       }
     }
@@ -1379,9 +1399,9 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         }
 
         // Store the index locally
-        this.eventIdIndex = index;
+        eventIdIndex = index;
         if (logger.isDebugEnabled()) {
-          logger.debug("{}: {} event id index: {}", this, messagePrefix, this.eventIdIndex);
+          logger.debug("{}: {} event id index: {}", this, messagePrefix, eventIdIndex);
         }
       }
     } finally {
@@ -1396,10 +1416,10 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   private Region<String, Integer> getEventIdIndexMetaDataRegion() {
-    if (this.eventIdIndexMetaDataRegion == null) {
-      this.eventIdIndexMetaDataRegion = initializeEventIdIndexMetaDataRegion(this);
+    if (eventIdIndexMetaDataRegion == null) {
+      eventIdIndexMetaDataRegion = initializeEventIdIndexMetaDataRegion(this);
     }
-    return this.eventIdIndexMetaDataRegion;
+    return eventIdIndexMetaDataRegion;
   }
 
   private static synchronized Region<String, Integer> initializeEventIdIndexMetaDataRegion(
@@ -1411,13 +1431,8 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
           cache.createInternalRegionFactory(RegionShortcut.REPLICATE);
 
       // Create a stats holder for the meta data stats
-      final HasCachePerfStats statsHolder = new HasCachePerfStats() {
-        @Override
-        public CachePerfStats getCachePerfStats() {
-          return new CachePerfStats(cache.getDistributedSystem(),
-              "RegionStats-" + META_DATA_REGION_NAME, sender.statisticsClock);
-        }
-      };
+      final HasCachePerfStats statsHolder = () -> new CachePerfStats(cache.getDistributedSystem(),
+          "RegionStats-" + META_DATA_REGION_NAME, sender.statisticsClock);
       factory.setIsUsedForMetaRegion(true);
       factory.setCachePerfStatsHolder(statsHolder);
       try {
@@ -1463,12 +1478,12 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
   @Override
   public int getEventQueueSize() {
-    AbstractGatewaySenderEventProcessor localProcessor = this.eventProcessor;
+    AbstractGatewaySenderEventProcessor localProcessor = eventProcessor;
     return localProcessor == null ? 0 : localProcessor.eventQueueSize();
   }
 
   public int getSecondaryEventQueueSize() {
-    AbstractGatewaySenderEventProcessor localProcessor = this.eventProcessor;
+    AbstractGatewaySenderEventProcessor localProcessor = eventProcessor;
     return localProcessor == null ? 0 : localProcessor.secondaryEventQueueSize();
   }
 
@@ -1477,11 +1492,11 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   protected boolean isAsyncEventQueue() {
-    return this.getAsyncEventListeners() != null && !this.getAsyncEventListeners().isEmpty();
+    return getAsyncEventListeners() != null && !getAsyncEventListeners().isEmpty();
   }
 
   public Object getLockForConcurrentDispatcher() {
-    return this.lockForConcurrentDispatcher;
+    return lockForConcurrentDispatcher;
   }
 
   public ReentrantReadWriteLock getLifeCycleLock() {
@@ -1520,7 +1535,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   public String getExpectedReceiverUniqueId() {
-    return this.expectedReceiverUniqueId;
+    return expectedReceiverUniqueId;
   }
 
   /**
@@ -1531,13 +1546,13 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
      * Timeout events received from secondary after 5 minutes
      */
     private static final int EVENT_TIMEOUT =
-        Integer.getInteger("Gateway.EVENT_TIMEOUT", 5 * 60 * 1000).intValue();
+        Integer.getInteger("Gateway.EVENT_TIMEOUT", 5 * 60 * 1000);
     public final long timeout;
     public final GatewaySenderEventImpl event;
 
     public EventWrapper(GatewaySenderEventImpl e) {
-      this.event = e;
-      this.timeout = System.currentTimeMillis() + EVENT_TIMEOUT;
+      event = e;
+      timeout = System.currentTimeMillis() + EVENT_TIMEOUT;
     }
   }
 
@@ -1556,26 +1571,26 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
     private final Object substituteValue;
 
     public TmpQueueEvent(EnumListenerEvent op, @Retained EntryEventImpl e, Object subValue) {
-      this.operation = op;
-      this.event = e;
-      this.substituteValue = subValue;
+      operation = op;
+      event = e;
+      substituteValue = subValue;
     }
 
     public EnumListenerEvent getOperation() {
-      return this.operation;
+      return operation;
     }
 
     public @Unretained EntryEventImpl getEvent() {
-      return this.event;
+      return event;
     }
 
     public Object getSubstituteValue() {
-      return this.substituteValue;
+      return substituteValue;
     }
 
     @Override
     public void release() {
-      this.event.release();
+      event.release();
     }
   }
 
@@ -1586,8 +1601,8 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       if (region == null) {
         continue;
       }
-      for (Iterator i = region.values().iterator(); i.hasNext();) {
-        GatewaySenderEventImpl gsei = (GatewaySenderEventImpl) i.next();
+      for (final Object o : region.values()) {
+        GatewaySenderEventImpl gsei = (GatewaySenderEventImpl) o;
         if (gsei.getKey().equals(key) && gsei.getVersionTimeStamp() == timestamp) {
           event = gsei;
           logger.info("{}: Providing synchronization event for key={}; timestamp={}: {}",
@@ -1601,20 +1616,20 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   }
 
   protected void putSynchronizationEvent(GatewayQueueEvent event) {
-    if (this.eventProcessor != null) {
-      this.lifeCycleLock.readLock().lock();
+    if (eventProcessor != null) {
+      lifeCycleLock.readLock().lock();
       try {
         logger.info("{}: Enqueueing synchronization event: {}",
             this, event);
-        this.eventProcessor.enqueueEvent(event, null);
-        this.statistics.incSynchronizationEventsEnqueued();
+        eventProcessor.enqueueEvent(event);
+        statistics.incSynchronizationEventsEnqueued();
       } catch (Throwable t) {
         logger.warn(String.format(
             "%s: Caught the following exception attempting to enqueue synchronization event=%s:",
-            new Object[] {this, event}),
+            this, event),
             t);
       } finally {
-        this.lifeCycleLock.readLock().unlock();
+        lifeCycleLock.readLock().unlock();
       }
     }
   }

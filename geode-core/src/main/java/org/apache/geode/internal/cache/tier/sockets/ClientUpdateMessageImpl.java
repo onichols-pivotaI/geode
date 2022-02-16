@@ -352,7 +352,6 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
   protected Message getMessage(CacheClientProxy proxy, byte[] latestValue) throws IOException {
     KnownVersion clientVersion = proxy.getVersion();
     byte[] serializedValue = null;
-    Message message;
     boolean conflation;
     conflation = (proxy.clientConflation == Handshake.CONFLATION_ON)
         || (proxy.clientConflation == Handshake.CONFLATION_DEFAULT && shouldBeConflated());
@@ -371,14 +370,8 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
         _value = serializedValue = CacheServerHelper.serialize(latestValue);
       }
     }
-    if (clientVersion.isNotOlderThan(KnownVersion.GFE_70)) {
-      message = getGFE70Message(proxy, serializedValue, conflation, clientVersion);
-    } else {
-      throw new IOException(
-          "Unsupported client version for server-to-client message creation: " + clientVersion);
-    }
 
-    return message;
+    return getGFE70Message(proxy, serializedValue, conflation, clientVersion);
   }
 
   private Message getGFE70Message(CacheClientProxy proxy, byte[] p_latestValue,
@@ -596,19 +589,15 @@ public class ClientUpdateMessageImpl implements ClientUpdateMessage, Sizeable, N
     return _clientCqs;
   }
 
-  /**
-   * Add cqs for the given client.
-   *
-   */
-  public void addClientCqs(ClientProxyMembershipID clientId, CqNameToOp filteredCqs) {
+  public void addOrSetClientCqs(ClientProxyMembershipID proxyID, ClientCqConcurrentMap clientCqs) {
     if (_clientCqs == null) {
-      _clientCqs = new ClientCqConcurrentMap();
-      _hasCqs = true;
+      _clientCqs = clientCqs;
+    } else {
+      _clientCqs.put(proxyID, clientCqs.get(proxyID));
     }
-    _clientCqs.put(clientId, filteredCqs);
   }
 
-  void addClientCq(ClientProxyMembershipID clientId, String cqName, Integer cqEvent) {
+  synchronized void addClientCq(ClientProxyMembershipID clientId, String cqName, Integer cqEvent) {
     if (_clientCqs == null) {
       _clientCqs = new ClientCqConcurrentMap();
       _hasCqs = true;

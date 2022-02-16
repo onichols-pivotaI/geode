@@ -109,8 +109,7 @@ public class ClassPathLoaderTest {
 
     // clean up the deployed files
     jarDeploymentService.listDeployed()
-        .forEach(deployment -> jarDeploymentService
-            .undeployByDeploymentName(deployment.getDeploymentName()));
+        .forEach(deployment -> jarDeploymentService.undeployByFileName(deployment.getFileName()));
   }
 
   /**
@@ -118,7 +117,7 @@ public class ClassPathLoaderTest {
    * class does not exist.
    */
   @Test
-  public void testForNameThrowsClassNotFoundException() throws Exception {
+  public void testForNameThrowsClassNotFoundException() {
     System.out.println("\nStarting ClassPathLoaderTest#testForNameThrowsClassNotFoundException");
 
     String classToLoad = "com.nowhere.DoesNotExist";
@@ -621,7 +620,7 @@ public class ClassPathLoaderTest {
       try {
         url = getTempFile().getAbsoluteFile().toURI().toURL();
         System.out.println("GeneratingClassLoader#findResource returning " + url);
-      } catch (IOException e) {
+      } catch (IOException ignored) {
       }
       return url;
     }
@@ -632,9 +631,9 @@ public class ClassPathLoaderTest {
       try {
         url = getTempFile().getAbsoluteFile().toURI().toURL();
         System.out.println("GeneratingClassLoader#findResources returning " + url);
-      } catch (IOException e) {
+      } catch (IOException ignored) {
       }
-      Vector<URL> urls = new Vector<URL>();
+      Vector<URL> urls = new Vector<>();
       urls.add(url);
       return urls.elements();
     }

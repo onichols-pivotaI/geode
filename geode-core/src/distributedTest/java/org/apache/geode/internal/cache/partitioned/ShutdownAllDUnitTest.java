@@ -16,6 +16,7 @@ package org.apache.geode.internal.cache.partitioned;
 
 import static org.apache.geode.internal.lang.ThrowableUtils.getRootCause;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
+import static org.apache.geode.test.dunit.IgnoredException.addIgnoredException;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -37,6 +38,7 @@ import org.apache.geode.admin.AdminDistributedSystemFactory;
 import org.apache.geode.admin.AdminException;
 import org.apache.geode.admin.DistributedSystemConfig;
 import org.apache.geode.admin.internal.AdminDistributedSystemImpl;
+import org.apache.geode.alerting.internal.spi.AlertingIOException;
 import org.apache.geode.cache.AttributesFactory;
 import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.CacheClosedException;
@@ -218,7 +220,7 @@ public class ShutdownAllDUnitTest extends JUnit4CacheTestCase {
         @Override
         public void cacheCreated(InternalCache cache) {
           calledCreateCache.set(true);
-          await().until(() -> cache.isCacheAtShutdownAll());
+          await().until(cache::isCacheAtShutdownAll);
         }
 
         @Override
@@ -231,14 +233,14 @@ public class ShutdownAllDUnitTest extends JUnit4CacheTestCase {
     });
     try {
       boolean vm0CalledCreateCache = vm0.invoke(() -> {
-        await().until(() -> calledCreateCache.get());
+        await().until(calledCreateCache::get);
         return calledCreateCache.get();
       });
       assertTrue(vm0CalledCreateCache);
       shutDownAllMembers(vm2, 1);
       asyncCreate.get(60, TimeUnit.SECONDS);
       boolean vm0CalledCloseCache = vm0.invoke(() -> {
-        await().until(() -> calledCloseCache.get());
+        await().until(calledCloseCache::get);
         return calledCloseCache.get();
       });
       assertTrue(vm0CalledCloseCache);
@@ -547,6 +549,8 @@ public class ShutdownAllDUnitTest extends JUnit4CacheTestCase {
    */
   @Test
   public void testShutdownAllWithMembersWaiting() throws Throwable {
+    addIgnoredException(AlertingIOException.class);
+
     Host host = Host.getHost(0);
     VM vm0 = host.getVM(0);
     VM vm1 = host.getVM(1);
@@ -582,7 +586,7 @@ public class ShutdownAllDUnitTest extends JUnit4CacheTestCase {
       a0.getResult(MAX_WAIT);
       fail("should have received a cache closed exception");
     } catch (AssertionError e) {
-      if (!CacheClosedException.class.isInstance(getRootCause(e))) {
+      if (!(getRootCause(e) instanceof CacheClosedException)) {
         throw e;
       }
     }
@@ -644,7 +648,7 @@ public class ShutdownAllDUnitTest extends JUnit4CacheTestCase {
     return new SerializableRunnable("create DR") {
       @Override
       public void run() {
-        Cache cache = ShutdownAllDUnitTest.this.getCache();
+        Cache cache = getCache();
 
         DiskStore ds = cache.findDiskStore(diskStoreName);
         if (ds == null) {
@@ -717,7 +721,7 @@ public class ShutdownAllDUnitTest extends JUnit4CacheTestCase {
           recoveryDone = null;
         }
 
-        Cache cache = ShutdownAllDUnitTest.this.getCache();
+        Cache cache = getCache();
 
         if (diskStoreName != null) {
           DiskStore ds = cache.findDiskStore(diskStoreName);
@@ -776,7 +780,7 @@ public class ShutdownAllDUnitTest extends JUnit4CacheTestCase {
         Region region = cache.getRegion(regionName);
         if (region instanceof PartitionedRegion) {
           PartitionedRegion pr = (PartitionedRegion) region;
-          return new TreeSet<Integer>(pr.getDataStore().getAllLocalBucketIds());
+          return new TreeSet<>(pr.getDataStore().getAllLocalBucketIds());
         } else {
           return null;
         }

@@ -33,7 +33,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import junitparams.naming.TestCaseName;
 import org.junit.Before;
@@ -52,8 +51,9 @@ import org.apache.geode.cache.query.security.UnrestrictedMethodAuthorizer;
 import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.security.SecurityService;
 import org.apache.geode.management.internal.cli.util.TestMethodAuthorizer;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class QueryConfigurationServiceImplTest {
   private static final Set<String> EMPTY_SET = Collections.emptySet();
   private CqService mockCqService;
@@ -210,7 +210,7 @@ public class QueryConfigurationServiceImplTest {
 
     configService.init(mockCache);
     assertThat(configService.getMethodAuthorizer()).isInstanceOf(RestrictedMethodAuthorizer.class);
-    String className = this.getClass().getName();
+    String className = getClass().getName();
     assertThatThrownBy(
         () -> configService.updateMethodAuthorizer(mockCache, false, className, EMPTY_SET))
             .hasCauseInstanceOf(QueryConfigurationServiceException.class)

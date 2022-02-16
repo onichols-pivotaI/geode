@@ -103,8 +103,7 @@ public final class MembershipLocatorBuilderImpl<ID extends MemberIdentifier> imp
   @Override
   public MembershipLocator<ID> create()
       throws UnknownHostException, MembershipConfigurationException {
-    Services.registerSerializables(serializer);
-    return new MembershipLocatorImpl<ID>(port, bindAddress, protocolChecker,
+    return new MembershipLocatorImpl<>(port, bindAddress, protocolChecker,
         executorServiceSupplier,
         socketCreator, serializer.getObjectSerializer(), serializer.getObjectDeserializer(),
         fallbackHandler,

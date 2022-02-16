@@ -28,11 +28,12 @@ dependencies {
   implementation('org.eclipse.jetty:jetty-webapp')
   implementation('org.eclipse.jetty:jetty-server')
   implementation('org.apache.commons:commons-lang3')
-  
+
   compileOnly(project(':geode-core'))
   compileOnly(project(':geode-common')) {
     exclude module: 'junit'
   }
+  compileOnly(project(':geode-serialization'))
 
   testImplementation(project(':geode-core'))
   testImplementation(project(':geode-common'))

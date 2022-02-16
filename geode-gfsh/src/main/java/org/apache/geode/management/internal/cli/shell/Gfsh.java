@@ -14,6 +14,9 @@
  */
 package org.apache.geode.management.internal.cli.shell;
 
+import static java.lang.System.lineSeparator;
+import static org.apache.geode.internal.util.ProductVersionUtil.getDistributionVersion;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -45,13 +48,14 @@ import org.springframework.shell.event.ShellStatus.Status;
 
 import org.apache.geode.annotations.internal.MakeNotStatic;
 import org.apache.geode.annotations.internal.MutableForTesting;
-import org.apache.geode.internal.GemFireVersion;
-import org.apache.geode.internal.lang.ClassUtils;
+import org.apache.geode.internal.SystemDescription;
+import org.apache.geode.internal.lang.utils.ClassUtils;
 import org.apache.geode.internal.logging.Banner;
 import org.apache.geode.internal.process.signal.AbstractSignalNotificationHandler;
 import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.internal.util.ArgumentRedactor;
 import org.apache.geode.internal.util.HostName;
+import org.apache.geode.internal.util.ProductVersionUtil;
 import org.apache.geode.internal.util.SunAPINotFoundException;
 import org.apache.geode.logging.internal.executors.LoggingThread;
 import org.apache.geode.management.cli.CommandProcessingException;
@@ -102,7 +106,7 @@ public class Gfsh extends JLineShell {
   public static final String GFSH_APP_NAME = "gfsh";
 
   public static final String LINE_INDENT = "    ";
-  public static final String LINE_SEPARATOR = System.getProperty("line.separator");
+  public static final String LINE_SEPARATOR = lineSeparator();
   // Default Window dimensions
   public static final int DEFAULT_WIDTH = 100;
   public static final String ENV_APP_NAME = "APP_NAME";
@@ -189,36 +193,36 @@ public class Gfsh extends JLineShell {
     // 2. set & use gfshConfig
     this.gfshConfig = gfshConfig;
     // The cache doesn't exist yet, since we are still setting up parsing.
-    this.gfshFileLogger = LogWrapper.getInstance(null);
-    this.gfshFileLogger.configure(this.gfshConfig);
-    this.ansiHandler = ANSIHandler.getInstance(this.gfshConfig.isANSISupported());
+    gfshFileLogger = LogWrapper.getInstance(null);
+    gfshFileLogger.configure(this.gfshConfig);
+    ansiHandler = ANSIHandler.getInstance(this.gfshConfig.isANSISupported());
 
     // 3. log system properties & gfsh environment TODO: change GFSH to use Geode logging
     @SuppressWarnings("deprecation")
     final Banner banner = new Banner();
-    this.gfshFileLogger.info(banner.getString());
+    gfshFileLogger.info(banner.getString());
 
     // 4. Customized History implementation
-    this.gfshHistory = new GfshHistory();
+    gfshHistory = new GfshHistory();
 
     // 6. Set System Environment here
     initializeEnvironment();
     // 7. Create Roo/SpringShell framework objects
-    this.executionStrategy = new GfshExecutionStrategy(this);
-    this.parser = new GfshParser(new CommandManager());
+    executionStrategy = new GfshExecutionStrategy(this);
+    parser = new GfshParser(new CommandManager());
     // 8. Set max History file size
     setHistorySize(gfshConfig.getHistorySize());
 
     String envProps = env.toString();
     envProps = envProps.substring(1, envProps.length() - 1);
     envProps = envProps.replaceAll(",", LINE_SEPARATOR);
-    this.gfshFileLogger.config("***** gfsh Environment ******" + LINE_SEPARATOR + envProps);
+    gfshFileLogger.config("***** gfsh Environment ******" + LINE_SEPARATOR + envProps);
 
-    if (this.gfshFileLogger.fineEnabled()) {
+    if (gfshFileLogger.fineEnabled()) {
       String gfshConfigStr = this.gfshConfig.toString();
       gfshConfigStr = gfshConfigStr.substring(0, gfshConfigStr.length() - 1);
       gfshConfigStr = gfshConfigStr.replaceAll(",", LINE_SEPARATOR);
-      this.gfshFileLogger.fine("***** gfsh Configuration ******" + LINE_SEPARATOR + gfshConfigStr);
+      gfshFileLogger.fine("***** gfsh Configuration ******" + LINE_SEPARATOR + gfshConfigStr);
     }
 
     // Setup signal handler for various signals (such as CTRL-C)...
@@ -228,21 +232,21 @@ public class Gfsh extends JLineShell {
       signalHandler = new GfshSignalHandler();
     } catch (SunAPINotFoundException e) {
       signalHandler = new AbstractSignalNotificationHandler() {};
-      this.gfshFileLogger.warning(e.getMessage());
+      gfshFileLogger.warning(e.getMessage());
     }
 
     // For test code only
     if (this.gfshConfig.isTestConfig()) {
       instance = this;
     }
-    this.isHeadlessMode = !launchShell;
-    if (this.isHeadlessMode) {
-      this.gfshFileLogger.config("Running in headless mode");
+    isHeadlessMode = !launchShell;
+    if (isHeadlessMode) {
+      gfshFileLogger.config("Running in headless mode");
       // disable jline terminal
       System.setProperty("jline.terminal", GfshUnsupportedTerminal.class.getName());
       env.put(ENV_APP_QUIET_EXECUTION, String.valueOf(true));
       // Only in headless mode, we do not want Gfsh's logger logs on screen
-      this.gfshFileLogger.setParentFor(logger);
+      gfshFileLogger.setParentFor(logger);
     }
     // we want to direct internal JDK logging to file in either mode
     redirectInternalJavaLoggers();
@@ -337,12 +341,12 @@ public class Gfsh extends JLineShell {
            * properly handle the case where the Logger has been garbage collected.
            */
           if (javaLogger != null) {
-            this.gfshFileLogger.setParentFor(javaLogger);
+            gfshFileLogger.setParentFor(javaLogger);
           }
         }
       }
     } catch (SecurityException e) {
-      this.gfshFileLogger.warning(e.getMessage(), e);
+      gfshFileLogger.warning(e.getMessage(), e);
     }
   }
 
@@ -451,15 +455,15 @@ public class Gfsh extends JLineShell {
     env.put(ENV_SYS_CLASSPATH, System.getProperty("java.class.path"));
     env.put(ENV_SYS_JAVA_VERSION, System.getProperty("java.version"));
     env.put(ENV_SYS_OS, System.getProperty("os.name"));
-    env.put(ENV_SYS_OS_LINE_SEPARATOR, System.getProperty("line.separator"));
+    env.put(ENV_SYS_OS_LINE_SEPARATOR, lineSeparator());
     env.put(ENV_SYS_GEODE_HOME_DIR, System.getenv("GEODE_HOME"));
 
     env.put(ENV_APP_NAME, Gfsh.GFSH_APP_NAME);
     readonlyAppEnv.add(ENV_APP_NAME);
     env.put(ENV_APP_LOGGING_ENABLED,
-        String.valueOf(!Level.OFF.equals(this.gfshConfig.getLogLevel())));
+        String.valueOf(!Level.OFF.equals(gfshConfig.getLogLevel())));
     readonlyAppEnv.add(ENV_APP_LOGGING_ENABLED);
-    env.put(ENV_APP_LOG_FILE, this.gfshConfig.getLogFilePath());
+    env.put(ENV_APP_LOG_FILE, gfshConfig.getLogFilePath());
     readonlyAppEnv.add(ENV_APP_LOG_FILE);
     env.put(ENV_APP_PWD, System.getProperty("user.dir"));
     readonlyAppEnv.add(ENV_APP_PWD);
@@ -527,15 +531,15 @@ public class Gfsh extends JLineShell {
    */
   private void executeInitFileIfPresent() {
 
-    String initFileName = this.gfshConfig.getInitFileName();
+    String initFileName = gfshConfig.getInitFileName();
     if (initFileName != null) {
-      this.gfshFileLogger.info("Using " + initFileName);
+      gfshFileLogger.info("Using " + initFileName);
       try {
         File gfshInitFile = new File(initFileName);
         boolean continueOnError = false;
-        this.executeScript(gfshInitFile, isQuietMode(), continueOnError);
+        executeScript(gfshInitFile, isQuietMode(), continueOnError);
       } catch (Exception exception) {
-        this.gfshFileLogger.severe(initFileName, exception);
+        gfshFileLogger.severe(initFileName, exception);
         setLastExecutionStatus(-1);
       }
     }
@@ -653,14 +657,13 @@ public class Gfsh extends JLineShell {
   }
 
   public String getBanner() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("    _________________________     __").append(LINE_SEPARATOR);
-    sb.append("   / _____/ ______/ ______/ /____/ /").append(LINE_SEPARATOR);
-    sb.append("  / /  __/ /___  /_____  / _____  / ").append(LINE_SEPARATOR);
-    sb.append(" / /__/ / ____/  _____/ / /    / /  ").append(LINE_SEPARATOR);
-    sb.append("/______/_/      /______/_/    /_/   ").append(" ").append(this.getVersion())
-        .append(LINE_SEPARATOR);
-    return ansiHandler.decorateString(sb.toString(), ANSIStyle.BLUE);
+    final String sb = "    _________________________     __" + LINE_SEPARATOR
+        + "   / _____/ ______/ ______/ /____/ /" + LINE_SEPARATOR
+        + "  / /  __/ /___  /_____  / _____  / " + LINE_SEPARATOR
+        + " / /__/ / ____/  _____/ / /    / /  " + LINE_SEPARATOR
+        + "/______/_/      /______/_/    /_/   " + " " + getVersion()
+        + LINE_SEPARATOR;
+    return ansiHandler.decorateString(sb, ANSIStyle.BLUE);
   }
 
   @Override
@@ -674,10 +677,21 @@ public class Gfsh extends JLineShell {
   }
 
   public String getVersion(boolean full) {
-    if (full) {
-      return GemFireVersion.asString();
-    } else {
-      return GemFireVersion.getGemFireVersion();
+    return full ? getFullVersion() : getShortVersion();
+  }
+
+  private String getShortVersion() {
+    return getDistributionVersion().getVersion();
+  }
+
+  private String getFullVersion() {
+    try {
+      return ProductVersionUtil.appendFullVersion(new StringBuilder())
+          .append(lineSeparator())
+          .append(SystemDescription.getRunningOnInfo())
+          .append(lineSeparator()).toString();
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
     }
   }
 
@@ -686,7 +700,7 @@ public class Gfsh extends JLineShell {
   }
 
   public String getWelcomeMessage() {
-    return ansiHandler.decorateString("Monitor and Manage " + GemFireVersion.getProductName(),
+    return ansiHandler.decorateString("Monitor and Manage " + getDistributionVersion().getName(),
         ANSIStyle.CYAN);
   }
 
@@ -896,7 +910,7 @@ public class Gfsh extends JLineShell {
     ResultModel result = null;
     String initialIsQuiet = getEnvProperty(ENV_APP_QUIET_EXECUTION);
     try {
-      this.isScriptRunning = true;
+      isScriptRunning = true;
       if (scriptFile == null) {
         throw new IllegalArgumentException("Given script file is null.");
       } else if (!scriptFile.exists()) {
@@ -908,7 +922,7 @@ public class Gfsh extends JLineShell {
       ScriptExecutionDetails scriptInfo = new ScriptExecutionDetails(scriptFile.getPath());
       if (scriptFile.exists()) {
         setEnvProperty(ENV_APP_QUIET_EXECUTION, String.valueOf(quiet));
-        this.suppressScriptCmdOutput = quiet;
+        suppressScriptCmdOutput = quiet;
         BufferedReader reader = new BufferedReader(new FileReader(scriptFile));
         String lineRead = "";
         StringBuilder linesBuffer = new StringBuilder();
@@ -978,7 +992,7 @@ public class Gfsh extends JLineShell {
     } finally {
       // reset to original Quiet Execution value
       setEnvProperty(ENV_APP_QUIET_EXECUTION, initialIsQuiet);
-      this.isScriptRunning = false;
+      isScriptRunning = false;
     }
 
     return result;
@@ -1009,8 +1023,7 @@ public class Gfsh extends JLineShell {
   }
 
   public Map<String, String> getEnv() {
-    Map<String, String> map = new TreeMap<>(env);
-    return map;
+    return new TreeMap<>(env);
   }
 
   public boolean isQuietMode() {
@@ -1043,7 +1056,7 @@ public class Gfsh extends JLineShell {
       if (line == null) {
         // Possibly Ctrl-D was pressed on empty prompt. ConsoleReader.readLine
         // returns null on Ctrl-D
-        this.exitShellRequest = ExitShellRequest.NORMAL_EXIT;
+        exitShellRequest = ExitShellRequest.NORMAL_EXIT;
         gfshFileLogger.info("Exiting gfsh, it seems Ctrl-D was pressed.");
       }
     } catch (IOException e) {
@@ -1080,7 +1093,7 @@ public class Gfsh extends JLineShell {
   }
 
   public GfshConfig getGfshConfig() {
-    return this.gfshConfig;
+    return gfshConfig;
   }
 
   @Override

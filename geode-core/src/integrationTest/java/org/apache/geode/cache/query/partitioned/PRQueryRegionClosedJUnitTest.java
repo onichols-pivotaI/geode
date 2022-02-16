@@ -82,8 +82,9 @@ public class PRQueryRegionClosedJUnitTest {
     final Region<Integer, PortfolioData> region =
         PartitionedRegionTestHelper.createPartitionedRegion(regionName, localMaxMemory, redundancy);
 
-    final Region<Integer, PortfolioData> localRegion =
-        PartitionedRegionTestHelper.createLocalRegion(localRegionName);
+    final Region localRegion = PartitionedRegionTestHelper.createLocalRegion(localRegionName);
+
+    final StringBuilder errorBuf = new StringBuilder();
 
     PortfolioData[] portfolios = new PortfolioData[100];
 
@@ -112,9 +113,18 @@ public class PRQueryRegionClosedJUnitTest {
         logger.info("<ExpectedException action=add>" + expectedRegionDestroyedException
             + "</ExpectedException>");
 
-        for (String s : queryString) {
+        for (final String s : queryString) {
 
           try {
+
+            SelectResults resSetPR = region.query(s);
+            SelectResults resSetLocal = localRegion.query(s);
+            String failureString =
+                PartitionedRegionTestHelper.compareResultSets(resSetPR, resSetLocal);
+            Thread.sleep(delayQuery);
+            if (failureString != null) {
+              errorBuf.append(failureString);
+              throw (new Exception(failureString));
 
             SelectResults<PortfolioData> resSetPR = region.query(s);
             SelectResults<PortfolioData> resSetLocal = localRegion.query(s);
@@ -149,6 +159,7 @@ public class PRQueryRegionClosedJUnitTest {
             encounteredException = true;
             StringWriter sw = new StringWriter();
             qe.printStackTrace(new PrintWriter(sw));
+            errorBuf.append(sw);
           }
         }
         logger.info("<ExpectedException action=remove>" + expectedRegionDestroyedException

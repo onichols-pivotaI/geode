@@ -28,7 +28,6 @@ import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.After;
 import org.junit.Rule;
@@ -57,10 +56,11 @@ import org.apache.geode.test.dunit.rules.MemberVM;
 import org.apache.geode.test.junit.categories.AEQTest;
 import org.apache.geode.test.junit.rules.ExecutorServiceRule;
 import org.apache.geode.test.junit.rules.serializable.SerializableTestName;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category(AEQTest.class)
 @SuppressWarnings("serial")
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class SerialAsyncEventListenersDifferentPrimariesDistributedTest implements Serializable {
 
   private MemberVM locator;
@@ -100,9 +100,9 @@ public class SerialAsyncEventListenersDifferentPrimariesDistributedTest implemen
       // servers.
       addIgnoredException("Possible loss of quorum");
       addIgnoredException(ForcedDisconnectException.class);
-      server1.invoke(() -> dumpStacks());
-      server2.invoke(() -> dumpStacks());
-      server3.invoke(() -> dumpStacks());
+      server1.invoke(this::dumpStacks);
+      server2.invoke(this::dumpStacks);
+      server3.invoke(this::dumpStacks);
       clusterRule.crashVM(1);
       clusterRule.crashVM(2);
       clusterRule.crashVM(3);
@@ -256,7 +256,7 @@ public class SerialAsyncEventListenersDifferentPrimariesDistributedTest implemen
     private static final int NUM_ENTRIES = 10000;
 
     public RegionOperationsFunction() {
-      this.cache = CacheFactory.getAnyInstance();
+      cache = CacheFactory.getAnyInstance();
     }
 
     @Override
@@ -264,7 +264,7 @@ public class SerialAsyncEventListenersDifferentPrimariesDistributedTest implemen
       String[] args = (String[]) context.getArguments();
       String regionName = args[0];
       String operation = args[1];
-      Region region = this.cache.getRegion(regionName);
+      Region region = cache.getRegion(regionName);
       switch (operation) {
         case "put":
           doPut(region);
@@ -299,7 +299,7 @@ public class SerialAsyncEventListenersDifferentPrimariesDistributedTest implemen
     private void doDestroy(Region region) {
       try {
         region.destroy(RANDOM.nextInt(NUM_ENTRIES));
-      } catch (EntryNotFoundException e) {
+      } catch (EntryNotFoundException ignored) {
       }
     }
 

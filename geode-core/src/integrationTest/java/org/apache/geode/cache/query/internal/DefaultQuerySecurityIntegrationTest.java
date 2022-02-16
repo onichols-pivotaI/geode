@@ -28,7 +28,6 @@ import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import junitparams.naming.TestCaseName;
 import org.junit.Before;
@@ -52,12 +51,13 @@ import org.apache.geode.security.query.data.QueryTestObject;
 import org.apache.geode.test.junit.categories.OQLQueryTest;
 import org.apache.geode.test.junit.categories.SecurityTest;
 import org.apache.geode.test.junit.rules.ServerStarterRule;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 @Category({OQLQueryTest.class, SecurityTest.class})
 public class DefaultQuerySecurityIntegrationTest {
-  private int entries = 500;
-  private int executions = 20;
+  private final int entries = 500;
+  private final int executions = 20;
   private InternalCache spiedCache;
 
   @Rule
@@ -235,7 +235,7 @@ public class DefaultQuerySecurityIntegrationTest {
 
       if (executor instanceof PartitionedRegion) {
         PartitionedRegion prExecutor = spy((PartitionedRegion) executor);
-        when(prExecutor.getCache()).thenReturn(this.spyCache);
+        when(prExecutor.getCache()).thenReturn(spyCache);
 
         return prExecutor;
       }
@@ -262,7 +262,7 @@ public class DefaultQuerySecurityIntegrationTest {
 
   @SuppressWarnings("unused")
   private static class CustomQueryTestObject extends QueryTestObject {
-    private int privateID;
+    private final int privateID;
 
     public int privateID() {
       return privateID;
@@ -270,7 +270,7 @@ public class DefaultQuerySecurityIntegrationTest {
 
     CustomQueryTestObject(int id, String name) {
       super(id, name);
-      this.privateID = id;
+      privateID = id;
     }
   }
 }

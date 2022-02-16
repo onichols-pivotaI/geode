@@ -22,7 +22,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -33,6 +32,7 @@ import org.apache.geode.internal.cache.PartitionedRegion;
 import org.apache.geode.test.dunit.AsyncInvocation;
 import org.apache.geode.test.dunit.SerializableRunnableIF;
 import org.apache.geode.test.junit.categories.LuceneTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 /**
  * This test class is intended to contain basic integration tests of the lucene query class that
@@ -40,7 +40,7 @@ import org.apache.geode.test.junit.categories.LuceneTest;
  *
  */
 @Category({LuceneTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class LuceneQueriesReindexDUnitTest extends LuceneQueriesAccessorBase {
 
   private static final long serialVersionUID = 1L;
@@ -52,14 +52,14 @@ public class LuceneQueriesReindexDUnitTest extends LuceneQueriesAccessorBase {
 
   private void createIndex(String fieldName) {
     createIndex(INDEX_NAME, fieldName);
-  };
+  }
 
   private void createIndex(String indexName, String fieldName) {
     LuceneService luceneService = LuceneServiceProvider.get(getCache());
     LuceneIndexFactoryImpl indexFactory =
         (LuceneIndexFactoryImpl) luceneService.createIndexFactory().addField(fieldName);
     indexFactory.create(indexName, REGION_NAME, true);
-  };
+  }
 
   @Test
   @Parameters(method = "getListOfRegionTestTypes")
@@ -77,7 +77,7 @@ public class LuceneQueriesReindexDUnitTest extends LuceneQueriesAccessorBase {
     assertTrue(waitForFlushBeforeExecuteTextSearch(dataStore1, 60000));
     executeTextSearch(accessor);
 
-    dataStore1.invoke(() -> destroyIndex());
+    dataStore1.invoke(this::destroyIndex);
 
     // re-index stored data
     AsyncInvocation ai1 = dataStore1.invokeAsync(() -> {
@@ -164,7 +164,7 @@ public class LuceneQueriesReindexDUnitTest extends LuceneQueriesAccessorBase {
     assertTrue(waitForFlushBeforeExecuteTextSearch(dataStore1, 60000));
     executeTextSearch(accessor);
 
-    dataStore1.invoke(() -> destroyIndex());
+    dataStore1.invoke(this::destroyIndex);
 
     // re-index stored data
     verifyCreateIndexWithDifferentFieldShouldFail();

@@ -22,9 +22,7 @@ plugins {
 
 repositories {
   mavenCentral()
-  maven {
-    url "https://plugins.gradle.org/m2/"
-  }
+  gradlePluginPortal()
 }
 
 dependencies {
@@ -33,11 +31,13 @@ dependencies {
   }
   implementation(gradleApi())
   implementation('org.apache.commons:commons-lang3:3.12.0')
-  implementation('org.apache.maven:maven-artifact:3.6.3')
-  implementation('com.google.guava:guava:30.1.1-jre')
-  implementation('com.github.docker-java:docker-java:3.2.7')
-  implementation('me.champeau.gradle:japicmp-gradle-plugin:0.2.9')
+  implementation('org.apache.maven:maven-artifact:3.8.1')
+  implementation('com.google.guava:guava:31.0.1-jre')
+  implementation('me.champeau.gradle:japicmp-gradle-plugin:0.3.0')
   implementation('junit:junit:4.13.2')
+
+  // Pin jgit to 5.13.0 to fix grgit having open dependencies on jgit, which rolled to java 11 with version 6.
+  runtimeOnly('org.eclipse.jgit:org.eclipse.jgit:5.13.0.202109080827-r')
 
   testAnnotationProcessor(this.project)
 }

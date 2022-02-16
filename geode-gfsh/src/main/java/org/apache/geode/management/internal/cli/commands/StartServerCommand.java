@@ -14,7 +14,7 @@
  */
 package org.apache.geode.management.internal.cli.commands;
 
-import static org.apache.geode.management.cli.GfshCommand.EXPERIMENTAL;
+import static java.lang.System.lineSeparator;
 import static org.apache.geode.management.internal.cli.commands.StartMemberUtils.resolveWorkingDirectory;
 
 import java.io.File;
@@ -132,14 +132,6 @@ public class StartServerCommand extends OfflineGfshCommand {
           help = CliStrings.START_SERVER__MEMCACHED_PROTOCOL__HELP) final String memcachedProtocol,
       @CliOption(key = CliStrings.START_SERVER__MEMCACHED_BIND_ADDRESS,
           help = CliStrings.START_SERVER__MEMCACHED_BIND_ADDRESS__HELP) final String memcachedBindAddress,
-      @CliOption(key = CliStrings.START_SERVER__REDIS_PORT,
-          help = EXPERIMENTAL + CliStrings.START_SERVER__REDIS_PORT__HELP) final Integer redisPort,
-      @CliOption(key = CliStrings.START_SERVER__REDIS_BIND_ADDRESS,
-          help = EXPERIMENTAL
-              + CliStrings.START_SERVER__REDIS_BIND_ADDRESS__HELP) final String redisBindAddress,
-      @CliOption(key = CliStrings.START_SERVER__REDIS_PASSWORD,
-          help = EXPERIMENTAL
-              + CliStrings.START_SERVER__REDIS_PASSWORD__HELP) final String redisPassword,
       @CliOption(key = CliStrings.START_SERVER__MESSAGE__TIME__TO__LIVE,
           help = CliStrings.START_SERVER__MESSAGE__TIME__TO__LIVE__HELP) final Integer messageTimeToLive,
       @CliOption(key = CliStrings.START_SERVER__OFF_HEAP_MEMORY_SIZE,
@@ -175,7 +167,9 @@ public class StartServerCommand extends OfflineGfshCommand {
       @CliOption(key = CliStrings.START_SERVER__HTTP_SERVICE_BIND_ADDRESS,
           unspecifiedDefaultValue = "",
           help = CliStrings.START_SERVER__HTTP_SERVICE_BIND_ADDRESS__HELP) final String httpServiceBindAddress,
-      @CliOption(key = CliStrings.START_SERVER__USERNAME, unspecifiedDefaultValue = "",
+      @CliOption(
+          key = {CliStrings.START_SERVER__USERNAME, CliStrings.START_SERVER__USERNAME_LONGFORM},
+          unspecifiedDefaultValue = "",
           help = CliStrings.START_SERVER__USERNAME__HELP) final String userName,
       @CliOption(key = CliStrings.START_SERVER__PASSWORD, unspecifiedDefaultValue = "",
           help = CliStrings.START_SERVER__PASSWORD__HELP) String passwordToUse,
@@ -210,8 +204,8 @@ public class StartServerCommand extends OfflineGfshCommand {
         evictionOffHeapPercentage, force, group, hostNameForClients, jmxManagerHostnameForClients,
         includeSystemClasspath, initialHeap, jvmArgsOpts, locators, locatorWaitTime, lockMemory,
         logLevel, maxConnections, maxHeap, maxMessageCount, maxThreads, mcastBindAddress, mcastPort,
-        memcachedPort, memcachedProtocol, memcachedBindAddress, redisPort, redisBindAddress,
-        redisPassword, messageTimeToLive, offHeapMemorySize, gemfirePropertiesFile, rebalance,
+        memcachedPort, memcachedProtocol, memcachedBindAddress, messageTimeToLive,
+        offHeapMemorySize, gemfirePropertiesFile, rebalance,
         gemfireSecurityPropertiesFile, serverBindAddress, serverPort, socketBufferSize,
         springXmlLocation, statisticsArchivePathname, requestSharedConfiguration, startRestApi,
         httpServicePort, httpServiceBindAddress, userName, passwordToUse, redirectOutput);
@@ -227,7 +221,7 @@ public class StartServerCommand extends OfflineGfshCommand {
       Integer locatorWaitTime, Boolean lockMemory, String logLevel, Integer maxConnections,
       String maxHeap, Integer maxMessageCount, Integer maxThreads, String mcastBindAddress,
       Integer mcastPort, Integer memcachedPort, String memcachedProtocol,
-      String memcachedBindAddress, Integer redisPort, String redisBindAddress, String redisPassword,
+      String memcachedBindAddress,
       Integer messageTimeToLive, String offHeapMemorySize, File gemfirePropertiesFile,
       Boolean rebalance, File gemfireSecurityPropertiesFile, String serverBindAddress,
       Integer serverPort, Integer socketBufferSize, String springXmlLocation,
@@ -286,12 +280,6 @@ public class StartServerCommand extends OfflineGfshCommand {
         ConfigurationProperties.MEMCACHED_PROTOCOL, memcachedProtocol);
     StartMemberUtils.setPropertyIfNotNull(gemfireProperties,
         ConfigurationProperties.MEMCACHED_BIND_ADDRESS, memcachedBindAddress);
-    StartMemberUtils.setPropertyIfNotNull(gemfireProperties, ConfigurationProperties.REDIS_PORT,
-        redisPort);
-    StartMemberUtils.setPropertyIfNotNull(gemfireProperties,
-        ConfigurationProperties.REDIS_BIND_ADDRESS, redisBindAddress);
-    StartMemberUtils.setPropertyIfNotNull(gemfireProperties, ConfigurationProperties.REDIS_PASSWORD,
-        redisPassword);
     StartMemberUtils.setPropertyIfNotNull(gemfireProperties,
         ConfigurationProperties.STATISTIC_ARCHIVE_FILE, statisticsArchivePathname);
     StartMemberUtils.setPropertyIfNotNull(gemfireProperties,
@@ -306,17 +294,6 @@ public class StartServerCommand extends OfflineGfshCommand {
         ConfigurationProperties.HTTP_SERVICE_PORT, httpServicePort);
     StartMemberUtils.setPropertyIfNotNull(gemfireProperties,
         ConfigurationProperties.HTTP_SERVICE_BIND_ADDRESS, httpServiceBindAddress);
-
-    // if compatible-with-redis-port, compatible-with-redis-bind-address, or
-    // compatible-with-redis-password are specified in the command line, REDIS_ENABLED should be set
-    // to true
-    String stringRedisPort;
-    stringRedisPort = redisPort == null ? "" : redisPort.toString();
-
-    if (StringUtils.isNotBlank(stringRedisPort) || StringUtils.isNotBlank(redisPassword)
-        || StringUtils.isNotBlank(redisBindAddress)) {
-      gemfireProperties.setProperty(ConfigurationProperties.REDIS_ENABLED, "true");
-    }
 
     // if username is specified in the command line, it will overwrite what's set in the
     // properties file
@@ -362,11 +339,11 @@ public class StartServerCommand extends OfflineGfshCommand {
     final ProcessStreamReader.ReadingMode readingMode = SystemUtils.isWindows()
         ? ProcessStreamReader.ReadingMode.NON_BLOCKING : ProcessStreamReader.ReadingMode.BLOCKING;
 
-    final StringBuffer message = new StringBuffer(); // need thread-safe StringBuffer
+    final StringBuilder message = new StringBuilder(); // need thread-safe StringBuilder
     ProcessStreamReader.InputListener inputListener = line -> {
       message.append(line);
       if (readingMode == ProcessStreamReader.ReadingMode.BLOCKING) {
-        message.append(SystemUtils.getLineSeparator());
+        message.append(lineSeparator());
       }
     };
 
@@ -403,7 +380,7 @@ public class StartServerCommand extends OfflineGfshCommand {
           if (serverState.isStartingOrNotResponding()
               && !(StringUtils.isBlank(currentServerStatusMessage)
                   || currentServerStatusMessage.equalsIgnoreCase(previousServerStatusMessage)
-                  || currentServerStatusMessage.trim().toLowerCase().equals("null"))) {
+                  || currentServerStatusMessage.trim().equalsIgnoreCase("null"))) {
             Gfsh.println();
             Gfsh.println(currentServerStatusMessage);
             previousServerStatusMessage = currentServerStatusMessage;
@@ -413,7 +390,7 @@ public class StartServerCommand extends OfflineGfshCommand {
 
           return ResultModel.createError(
               String.format(CliStrings.START_SERVER__PROCESS_TERMINATED_ABNORMALLY_ERROR_MESSAGE,
-                  exitValue, serverLauncher.getWorkingDirectory(), message.toString()));
+                  exitValue, serverLauncher.getWorkingDirectory(), message));
 
         }
       } while (!(registeredServerSignalListener && serverSignalListener.isSignaled())

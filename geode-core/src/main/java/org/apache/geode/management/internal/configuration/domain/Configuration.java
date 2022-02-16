@@ -15,6 +15,8 @@
 package org.apache.geode.management.internal.configuration.domain;
 
 
+import static org.apache.geode.management.internal.utils.JarFileUtils.getArtifactId;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.EOFException;
@@ -28,7 +30,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerException;
@@ -36,8 +37,8 @@ import javax.xml.transform.TransformerException;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
-import org.apache.geode.DataSerializable;
 import org.apache.geode.DataSerializer;
+import org.apache.geode.internal.VersionedDataSerializable;
 import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.internal.serialization.Version;
 import org.apache.geode.internal.serialization.Versioning;
@@ -49,7 +50,7 @@ import org.apache.geode.management.internal.configuration.utils.XmlUtils;
  * Domain object for all the configuration related data.
  *
  */
-public class Configuration implements DataSerializable {
+public class Configuration implements VersionedDataSerializable {
   private static final long serialVersionUID = 1L;
   private String configName;
   private String cacheXmlContent;
@@ -137,28 +138,37 @@ public class Configuration implements DataSerializable {
   }
 
   public void putDeployment(Deployment deployment) {
-    String artifactId = deployment.getDeploymentName();
-    deployments.values()
-        .removeIf(d -> d.getDeploymentName().equals(artifactId));
-    deployments.put(deployment.getDeploymentName(), deployment);
+    String artifactId = getArtifactId(deployment.getFileName());
+    deployments.values().removeIf(d -> getArtifactId(d.getFileName()).equals(artifactId));
+    deployments.put(deployment.getId(), deployment);
   }
 
   public Collection<Deployment> getDeployments() {
     return deployments.values();
   }
 
-  public void removeDeployments(Collection<String> deploymentsToRemove) {
-    if (deploymentsToRemove == null) {
+  public void removeDeployments(Collection<String> jarNames) {
+    if (jarNames == null) {
       deployments.clear();
     } else {
-      for (String deploymentName : deploymentsToRemove) {
-        deployments.remove(deploymentName);
+      for (String jarName : jarNames) {
+        deployments.remove(jarName);
       }
     }
   }
 
   public Set<String> getJarNames() {
-    return deployments.values().stream().map(Deployment::getFileName).collect(Collectors.toSet());
+    return deployments.keySet();
+  }
+
+  public void toDataPre_GEODE_1_12_0_0(DataOutput out) throws IOException {
+    DataSerializer.writeString(configName, out);
+    DataSerializer.writeString(cacheXmlFileName, out);
+    DataSerializer.writeString(cacheXmlContent, out);
+    DataSerializer.writeString(propertiesFileName, out);
+    DataSerializer.writeProperties(gemfireProperties, out);
+    HashSet<String> jarNames = new HashSet<>(deployments.keySet());
+    DataSerializer.writeHashSet(jarNames, out);
   }
 
   @Override
@@ -175,6 +185,19 @@ public class Configuration implements DataSerializable {
     // As of 1.12, this class starting writing the current version
     VersioningIO.writeOrdinal(out, KnownVersion.getCurrentVersion().ordinal(), true);
     DataSerializer.writeHashMap(deployments, out);
+  }
+
+  public void fromDataPre_GEODE_1_12_0_0(DataInput in) throws IOException, ClassNotFoundException {
+    configName = DataSerializer.readString(in);
+    cacheXmlFileName = DataSerializer.readString(in);
+    cacheXmlContent = DataSerializer.readString(in);
+    propertiesFileName = DataSerializer.readString(in);
+    gemfireProperties = DataSerializer.readProperties(in);
+    HashSet<String> jarNames = DataSerializer.readHashSet(in);
+    jarNames.stream()
+        .map(x -> new Deployment(x, null, null))
+        .forEach(deployment -> deployments.put(deployment.getFileName(),
+            deployment));
   }
 
   @Override
@@ -196,7 +219,8 @@ public class Configuration implements DataSerializable {
         // we are reading pre 1.12 data. So add each jar name to deployments
         jarNames.stream()
             .map(x -> new Deployment(x, null, null))
-            .forEach(deployment -> deployments.put(deployment.getDeploymentName(), deployment));
+            .forEach(
+                deployment -> deployments.put(deployment.getFileName(), deployment));
       }
     }
   }
@@ -236,4 +260,8 @@ public class Configuration implements DataSerializable {
         gemfireProperties, deployments);
   }
 
+  @Override
+  public KnownVersion[] getSerializationVersions() {
+    return new KnownVersion[] {KnownVersion.GEODE_1_12_0};
+  }
 }

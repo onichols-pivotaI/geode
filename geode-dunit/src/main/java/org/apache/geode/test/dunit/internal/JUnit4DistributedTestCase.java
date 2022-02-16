@@ -38,6 +38,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 
+import org.apache.geode.CancelException;
 import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.Region;
 import org.apache.geode.distributed.DistributedSystem;
@@ -121,14 +122,14 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
 
   @Override
   public final String getName() {
-    if (this.distributedTestFixture != this) {
-      return this.distributedTestFixture.getName();
+    if (distributedTestFixture != this) {
+      return distributedTestFixture.getName();
     }
-    return this.testNameForDistributedTestCase.getMethodName();
+    return testNameForDistributedTestCase.getMethodName();
   }
 
   public final Class<? extends DistributedTestFixture> getTestClass() {
-    return this.distributedTestFixture.getClass();
+    return distributedTestFixture.getClass();
   }
 
   /**
@@ -299,8 +300,8 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
    */
   @Override
   public Properties getDistributedSystemProperties() {
-    if (this.distributedTestFixture != this) {
-      return this.distributedTestFixture.getDistributedSystemProperties();
+    if (distributedTestFixture != this) {
+      return distributedTestFixture.getDistributedSystemProperties();
     }
     return defaultGetDistributedSystemProperties();
   }
@@ -401,8 +402,8 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
    */
   @Override
   public void preSetUp() throws Exception {
-    if (this.distributedTestFixture != this) {
-      this.distributedTestFixture.preSetUp();
+    if (distributedTestFixture != this) {
+      distributedTestFixture.preSetUp();
     }
   }
 
@@ -414,8 +415,8 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
    */
   @Override
   public void postSetUp() throws Exception {
-    if (this.distributedTestFixture != this) {
-      this.distributedTestFixture.postSetUp();
+    if (distributedTestFixture != this) {
+      distributedTestFixture.postSetUp();
     }
   }
 
@@ -458,7 +459,7 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
             sb.append("\n");
           }
           return new Throwable(
-              "Creating distributed system with the following configuration:\n" + sb.toString());
+              "Creating distributed system with the following configuration:\n" + sb);
         });
   }
 
@@ -508,8 +509,8 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
    */
   @Override
   public void preTearDown() throws Exception {
-    if (this.distributedTestFixture != this) {
-      this.distributedTestFixture.preTearDown();
+    if (distributedTestFixture != this) {
+      distributedTestFixture.preTearDown();
     }
   }
 
@@ -521,22 +522,22 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
    */
   @Override
   public void postTearDown() throws Exception {
-    if (this.distributedTestFixture != this) {
-      this.distributedTestFixture.postTearDown();
+    if (distributedTestFixture != this) {
+      distributedTestFixture.postTearDown();
     }
   }
 
   @Override
   public void preTearDownAssertions() throws Exception {
-    if (this.distributedTestFixture != this) {
-      this.distributedTestFixture.preTearDownAssertions();
+    if (distributedTestFixture != this) {
+      distributedTestFixture.preTearDownAssertions();
     }
   }
 
   @Override
   public void postTearDownAssertions() throws Exception {
-    if (this.distributedTestFixture != this) {
-      this.distributedTestFixture.postTearDownAssertions();
+    if (distributedTestFixture != this) {
+      distributedTestFixture.postTearDownAssertions();
     }
   }
 
@@ -569,17 +570,21 @@ public abstract class JUnit4DistributedTestCase implements DistributedTestFixtur
   protected static void destroyRegions(final Cache cache) {
     if (cache != null && !cache.isClosed()) {
       // try to destroy the root regions first so that we clean up any persistent files.
-      for (Region<?, ?> root : cache.rootRegions()) {
-        String regionFullPath = root == null ? null : root.getFullPath();
-        // for colocated regions you can't locally destroy a partitioned region.
-        if (root.isDestroyed() || root instanceof HARegion || root instanceof PartitionedRegion) {
-          continue;
+      try {
+        for (Region<?, ?> root : cache.rootRegions()) {
+          String regionFullPath = root == null ? null : root.getFullPath();
+          // for colocated regions you can't locally destroy a partitioned region.
+          if (root.isDestroyed() || root instanceof HARegion || root instanceof PartitionedRegion) {
+            continue;
+          }
+          try {
+            root.localDestroyRegion("teardown");
+          } catch (Throwable t) {
+            logger.error("Failure during tearDown destroyRegions for " + regionFullPath, t);
+          }
         }
-        try {
-          root.localDestroyRegion("teardown");
-        } catch (Throwable t) {
-          logger.error("Failure during tearDown destroyRegions for " + regionFullPath, t);
-        }
+      } catch (CancelException ce) {
+        logger.info("Cache is closing, no need to destroy regions");
       }
     }
   }

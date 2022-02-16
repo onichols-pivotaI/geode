@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.annotations.internal.MakeNotStatic;
 import org.apache.geode.cache.Cache;
@@ -68,7 +70,6 @@ import org.apache.geode.internal.cache.tier.sockets.Part;
 import org.apache.geode.internal.cache.tier.sockets.ServerConnection;
 import org.apache.geode.internal.security.AuthorizeRequest;
 import org.apache.geode.internal.security.SecurityService;
-import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.logging.internal.executors.LoggingExecutors;
 
 public class ExecuteFunction70 extends BaseCommand {
@@ -101,8 +102,9 @@ public class ExecuteFunction70 extends BaseCommand {
   }
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start) throws IOException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start) throws IOException {
     Object function = null;
     Object args;
     MemberMappedArgument memberMappedArg = null;
@@ -117,8 +119,7 @@ public class ExecuteFunction70 extends BaseCommand {
     try {
       byte[] bytes = clientMessage.getPart(0).getSerializedForm();
       functionState = bytes[0];
-      if (bytes.length >= 5
-          && serverConnection.getClientVersion().ordinal() >= KnownVersion.GFE_8009.ordinal()) {
+      if (bytes.length >= 5) {
         functionTimeout = Part.decodeInt(bytes, 1);
       }
 

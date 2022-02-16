@@ -41,9 +41,16 @@ import org.apache.geode.test.compiler.JarBuilder;
 import org.apache.geode.test.dunit.rules.ClusterStartupRule;
 import org.apache.geode.test.dunit.rules.MemberVM;
 import org.apache.geode.test.junit.assertions.ClusterManagementListResultAssert;
+import org.apache.geode.test.junit.rules.IgnoreOnWindowsRule;
+import org.apache.geode.test.junit.rules.MemberStarterRule;
 
 public class DeploymentSemanticVersionJarDUnitTest {
-  @ClassRule
+  // Classloaders hold onto the deployed jars. On Windows, this prevents Geode and tests from
+  // deleting the files, causing this test to fail.
+  @ClassRule(order = 0)
+  public static IgnoreOnWindowsRule ignoreOnWindows = new IgnoreOnWindowsRule();
+
+  @ClassRule(order = 1)
   public static TemporaryFolder stagingTempDir = new TemporaryFolder();
 
   @Rule
@@ -75,7 +82,7 @@ public class DeploymentSemanticVersionJarDUnitTest {
 
   @Before
   public void before() throws Exception {
-    locator0 = cluster.startLocatorVM(0, l -> l.withHttpService());
+    locator0 = cluster.startLocatorVM(0, MemberStarterRule::withHttpService);
     int locator0Port = locator0.getPort();
     locator1 =
         cluster.startLocatorVM(1, l -> l.withHttpService().withConnectionToLocator(locator0Port));
@@ -201,11 +208,9 @@ public class DeploymentSemanticVersionJarDUnitTest {
 
     ClusterManagementListResultAssert<Deployment, DeploymentInfo> listAssert =
         assertManagementListResult(client.list(new Deployment()));
-    listAssert.hasConfigurations().hasSize(1)
-        .extracting(Deployment::getFileName)
+    listAssert.hasConfigurations().hasSize(1).extracting(Deployment::getFileName)
         .containsExactly("def.jar");
-    listAssert.hasRuntimeInfos().hasSize(1)
-        .extracting(DeploymentInfo::getJarLocation).asString()
+    listAssert.hasRuntimeInfos().hasSize(1).extracting(DeploymentInfo::getJarLocation).asString()
         .containsOnlyOnce("def.v2.jar");
   }
 

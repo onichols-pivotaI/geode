@@ -15,7 +15,6 @@
 package org.apache.geode.internal.cache.ha;
 
 import static org.apache.geode.distributed.ConfigurationProperties.MCAST_PORT;
-import static org.apache.geode.internal.lang.SystemPropertyHelper.GEODE_PREFIX;
 import static org.apache.geode.internal.lang.SystemPropertyHelper.HA_REGION_QUEUE_EXPIRY_TIME_PROPERTY;
 import static org.apache.geode.internal.statistics.StatisticsClockFactory.disabledClock;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
@@ -80,6 +79,7 @@ import org.apache.geode.internal.cache.tier.sockets.CacheClientProxy;
 import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
 import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessageImpl;
 import org.apache.geode.internal.cache.tier.sockets.HAEventWrapper;
+import org.apache.geode.internal.lang.SystemProperty;
 import org.apache.geode.test.dunit.ThreadUtils;
 import org.apache.geode.test.junit.categories.ClientSubscriptionTest;
 
@@ -700,7 +700,7 @@ public class HARegionQueueJUnitTest {
         doOnce = true;
       } else {
         id = (EventID) iterator.next();
-        map.put(new Long(id.getThreadID()), id.getSequenceID());
+        map.put(id.getThreadID(), id.getSequenceID());
       }
     }
 
@@ -1350,7 +1350,7 @@ public class HARegionQueueJUnitTest {
    */
   @Test
   public void testExpiryUsingSystemProperty() throws Exception {
-    System.setProperty(GEODE_PREFIX + HA_REGION_QUEUE_EXPIRY_TIME_PROPERTY, "1");
+    System.setProperty(SystemProperty.DEFAULT_PREFIX + HA_REGION_QUEUE_EXPIRY_TIME_PROPERTY, "1");
 
     HARegionQueueAttributes haa = new HARegionQueueAttributes();
     HARegionQueue regionQueue = createHARegionQueue(testName.getMethodName(), haa);
@@ -1514,7 +1514,7 @@ public class HARegionQueueJUnitTest {
     ExecutorService executorService = Executors.newFixedThreadPool(numClients);
 
     Collection<Callable<Conflatable>> concurrentPuts =
-        Collections.nCopies(numClients, (Callable<Conflatable>) () -> regionQueue
+        Collections.nCopies(numClients, () -> regionQueue
             .putEntryConditionallyIntoHAContainer(mockHaEventWrapper));
 
     List<Future<Conflatable>> futures = executorService.invokeAll(concurrentPuts);
@@ -1569,9 +1569,9 @@ public class HARegionQueueJUnitTest {
     regionQueue.putEntryConditionallyIntoHAContainer(mockHAEventWrapper);
     regionQueue.putEntryConditionallyIntoHAContainer(mockHAEventWrapper);
 
-    verify(mockClientUpdateMessage, times(1)).addClientCqs(mockClientProxyMembershipId,
-        mockCqNameToOp);
-    verify(mockClientUpdateMessage, times(1)).addClientInterestList(mockClientProxyMembershipId,
+    verify(mockClientUpdateMessage).addOrSetClientCqs(mockClientProxyMembershipId,
+        mockClientCqConcurrentMap);
+    verify(mockClientUpdateMessage).addClientInterestList(mockClientProxyMembershipId,
         true);
 
     // Mock that the ClientUpdateMessage is only interested in invalidates, then do another put
@@ -1721,7 +1721,7 @@ public class HARegionQueueJUnitTest {
     ExecutorService executorService = Executors.newFixedThreadPool(numClients);
 
     Collection<Callable<Void>> concurrentDecAndRemoves =
-        Collections.nCopies(numClients, (Callable<Void>) () -> {
+        Collections.nCopies(numClients, () -> {
           regionQueue
               .decAndRemoveFromHAContainer(mockHAEventWrapper);
           return null;

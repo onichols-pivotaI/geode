@@ -14,7 +14,10 @@
  */
 package org.apache.geode.cache.client.internal;
 
+import java.io.IOException;
 import java.util.Arrays;
+
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.SerializationException;
 import org.apache.geode.cache.client.ServerOperationException;
@@ -30,7 +33,11 @@ import org.apache.geode.internal.cache.tier.sockets.ChunkedMessage;
 import org.apache.geode.internal.cache.tier.sockets.Message;
 import org.apache.geode.internal.cache.tier.sockets.ObjectPartList;
 import org.apache.geode.internal.cache.tier.sockets.Part;
+import org.apache.geode.internal.lang.SystemProperty;
+import org.apache.geode.internal.lang.SystemPropertyHelper;
 import org.apache.geode.internal.serialization.KnownVersion;
+import org.apache.geode.logging.internal.log4j.api.LogService;
+import org.apache.geode.pdx.PdxSerializationException;
 
 /**
  * Does a region query on a server
@@ -97,12 +104,12 @@ public class QueryOp {
     }
 
     @Override
-    protected Message createResponseMessage() {
+    protected @NotNull Message createResponseMessage() {
       return new ChunkedMessage(2, KnownVersion.CURRENT);
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       final SelectResults[] resultRef = new SelectResults[1];
       final Exception[] exceptionRef = new Exception[1];
       ChunkHandler ch = cm -> {
@@ -120,7 +127,31 @@ public class QueryOp {
           queryResult = resultPart.getObject();
         } catch (Exception e) {
           String s = "While deserializing " + getOpName() + " result";
-          exceptionRef[0] = new SerializationException(s, e);
+
+          // Enable the workaround to convert PdxSerializationException into IOException to retry.
+          // It only worked when the client is configured to connect to more than one cache server
+          // AND the pool's "retry-attempts" is -1 (the default which means try each server) or > 0.
+          // It is possible that if application closed the current connection and got a new
+          // connection to the same server and retried the query to it, that it would also
+          // workaround this issue and it would not have the limitations of needing multiple servers
+          // and would not depend on the retry-attempts configuration.
+          boolean enableQueryRetryOnPdxSerializationException = SystemProperty
+              .getProductBooleanProperty(
+                  SystemPropertyHelper.ENABLE_QUERY_RETRY_ON_PDX_SERIALIZATION_EXCEPTION)
+              .orElse(false);
+          if (e instanceof PdxSerializationException
+              && enableQueryRetryOnPdxSerializationException) {
+            // IOException will allow the client to retry next server in the connection pool until
+            // exhausted all the servers (so it will not retry forever). Why retry:
+            // The byte array of the pdxInstance is always the same at the server. Other clients can
+            // get a correct one from query response message. Even this client can get it correctly
+            // before and after the PdxSerializationException.
+            exceptionRef[0] = new IOException(s, e);
+            LogService.getLogger().warn(
+                "Encountered unexpected PdxSerializationException, retrying on another server");
+          } else {
+            exceptionRef[0] = new SerializationException(s, e);
+          }
           return;
         }
         if (queryResult instanceof Throwable) {

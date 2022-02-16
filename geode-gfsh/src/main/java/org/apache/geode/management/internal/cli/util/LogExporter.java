@@ -29,6 +29,7 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.Logger;
@@ -94,14 +95,14 @@ public class LogExporter {
 
   protected void writeFilteredLogFile(Path originalLogFile, Path filteredLogFile)
       throws IOException {
-    this.logFilter.startNewFile();
+    logFilter.startNewFile();
 
     try (BufferedReader reader = new BufferedReader(new FileReader(originalLogFile.toFile()))) {
       try (BufferedWriter writer = new BufferedWriter(new FileWriter(filteredLogFile.toFile()))) {
 
         String line;
         while ((line = reader.readLine()) != null) {
-          LogFilter.LineFilterResult result = this.logFilter.acceptsLine(line);
+          LogFilter.LineFilterResult result = logFilter.acceptsLine(line);
 
           if (result == LogFilter.LineFilterResult.REMAINDER_OF_FILE_REJECTED) {
             break;
@@ -149,12 +150,12 @@ public class LogExporter {
    */
   private long filterAndSize(Path originalLogFile) throws IOException {
     long size = 0;
-    this.logFilter.startNewFile();
+    logFilter.startNewFile();
 
     try (BufferedReader reader = new BufferedReader(new FileReader(originalLogFile.toFile()))) {
       String line;
       while ((line = reader.readLine()) != null) {
-        LogFilter.LineFilterResult result = this.logFilter.acceptsLine(line);
+        LogFilter.LineFilterResult result = logFilter.acceptsLine(line);
 
         if (result == LogFilter.LineFilterResult.REMAINDER_OF_FILE_REJECTED) {
           break;
@@ -183,10 +184,12 @@ public class LogExporter {
     if (!workingDir.toFile().isDirectory()) {
       return Collections.emptyList();
     }
-    return Files.list(workingDir)
-        .filter(Files::isRegularFile)
-        .filter(fileSelector)
-        .filter(this.logFilter::acceptsFile)
-        .collect(toList());
+    try (Stream<Path> stream = Files.list(workingDir)) {
+      return stream
+          .filter(Files::isRegularFile)
+          .filter(fileSelector)
+          .filter(logFilter::acceptsFile)
+          .collect(toList());
+    }
   }
 }

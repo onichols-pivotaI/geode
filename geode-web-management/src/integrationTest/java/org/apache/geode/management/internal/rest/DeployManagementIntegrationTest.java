@@ -63,7 +63,7 @@ public class DeployManagementIntegrationTest {
   private ClusterManagementService client;
 
   private Deployment deployment;
-  private static ObjectMapper mapper = GeodeJsonMapper.getMapper();
+  private static final ObjectMapper mapper = GeodeJsonMapper.getMapper();
   private File jar1, jar2;
 
   @Rule
@@ -105,7 +105,7 @@ public class DeployManagementIntegrationTest {
         .hasEntityInfo()
         .hasSize(2)
         .extracting(EntityInfo::getId)
-        .containsExactlyInAnyOrder("jar1", "jar2");
+        .containsExactlyInAnyOrder("jar1.jar", "jar2.jar");
   }
 
 

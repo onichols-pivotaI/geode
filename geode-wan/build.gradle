@@ -30,9 +30,12 @@ dependencies {
   implementation(project(':geode-serialization'))
   implementation(project(':geode-tcp-server'))
   implementation(project(':geode-core'))
+  implementation(project(':geode-gfsh'))
   implementation('org.apache.commons:commons-lang3')
 
   compileOnly('org.apache.logging.log4j:log4j-api')
+  compileOnly('org.jetbrains:annotations')
+
 
   testImplementation(project(':geode-junit'))
   testImplementation('org.assertj:assertj-core')
@@ -67,7 +70,7 @@ dependencies {
   upgradeTestImplementation('org.awaitility:awaitility')
   upgradeTestImplementation('org.assertj:assertj-core')
   upgradeTestImplementation('junit:junit')
-  upgradeTestImplementation('xml-apis:xml-apis:2.0.2')
+  upgradeTestImplementation('xml-apis:xml-apis')
 
   upgradeTestRuntimeOnly(project(path: ':geode-old-versions', configuration: 'classpathsOutput'))
 }

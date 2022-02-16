@@ -61,7 +61,7 @@ public class ClusterManagementSecurityRestIntegrationTest {
 
   private LocatorWebContext context;
 
-  private static List<TestContext> testContexts = new ArrayList<>();
+  private static final List<TestContext> testContexts = new ArrayList<>();
   private static ObjectMapper mapper;
 
   @BeforeClass
@@ -159,7 +159,7 @@ public class ClusterManagementSecurityRestIntegrationTest {
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.statusCode", is("UNAUTHENTICATED")))
         .andExpect(jsonPath("$.statusMessage",
-            is("Authentication error. Please check your credentials.")));
+            is("Invalid username/password.")));
   }
 
   @Test

@@ -14,10 +14,10 @@
  */
 package org.apache.geode.internal.cache;
 
+import static java.lang.System.lineSeparator;
 import static org.apache.geode.internal.cache.LocalRegion.InitializationLevel.AFTER_INITIAL_IMAGE;
 import static org.apache.geode.internal.cache.LocalRegion.InitializationLevel.ANY_INIT;
 import static org.apache.geode.internal.cache.LocalRegion.InitializationLevel.BEFORE_INITIAL_IMAGE;
-import static org.apache.geode.internal.lang.SystemUtils.getLineSeparator;
 import static org.apache.geode.internal.offheap.annotations.OffHeapIdentifier.ENTRY_EVENT_NEW_VALUE;
 import static org.apache.geode.util.internal.UncheckedUtils.uncheckedCast;
 
@@ -58,6 +58,7 @@ import javax.transaction.SystemException;
 import javax.transaction.Transaction;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.CancelCriterion;
 import org.apache.geode.CancelException;
@@ -352,13 +353,16 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
       GeodeGlossary.GEMFIRE_PREFIX + "EXPIRY_UNITS_MS";
 
   /**
-   * Used by unit tests to set expiry to milliseconds instead of the default seconds. Used in
-   * ExpiryTask.
+   * Used by unit tests to set expiry to milliseconds instead of the default seconds.
    *
    * @since GemFire 5.0
    */
+  private final boolean EXPIRY_UNITS_MS;
+
   @VisibleForTesting
-  final boolean EXPIRY_UNITS_MS;
+  boolean isExpiryUnitsMilliseconds() {
+    return EXPIRY_UNITS_MS;
+  }
 
   private final EntryEventFactory entryEventFactory;
   private final RegionMapConstructor regionMapConstructor;
@@ -1497,7 +1501,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
 
   @VisibleForTesting
   Map getGetFutures() {
-    return this.getFutures;
+    return getFutures;
   }
 
   /**
@@ -1730,7 +1734,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
               }
             }
           } else if (this instanceof DistributedRegion
-              && !((DistributedRegion) this).scope.isDistributedNoAck()
+              && !scope.isDistributedNoAck()
               && !((CacheDistributionAdvisee) this).getCacheDistributionAdvisor().adviseCacheOp()
                   .isEmpty()) {
             extractDelta = true;
@@ -2706,7 +2710,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
       getEventTracker().stop();
 
       if (diskRegion != null) {
-        diskRegion.prepareForClose(this);
+        diskRegion.prepareForClose();
       }
 
       isDestroyed = true;
@@ -3339,7 +3343,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
    * @param eventID event identifier for the GC operation
    * @param clientRouting routing info (if null a routing is computed)
    */
-  public void expireTombstones(Map<VersionSource, Long> regionGCVersions, EventID eventID,
+  public void expireTombstones(Map<VersionSource<?>, Long> regionGCVersions, EventID eventID,
       FilterInfo clientRouting) {
     if (!getConcurrencyChecksEnabled()) {
       return;
@@ -3375,7 +3379,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
    * @param eventID the ID of the event
    * @param routing routing info (routing is computed if this is null)
    */
-  void notifyClientsOfTombstoneGC(Map<VersionSource, Long> regionGCVersions,
+  void notifyClientsOfTombstoneGC(Map<VersionSource<?>, Long> regionGCVersions,
       Set<Object> keysRemoved, EventID eventID, FilterInfo routing) {
     if (CacheClientNotifier.singletonHasClientProxies()) {
       // Only route the event to clients interested in the partitioned region.
@@ -3736,9 +3740,10 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
   }
 
   // TODO: this is distressingly similar to code in the client.internal package
-  private void processSingleInterest(Object key, int interestType,
-      InterestResultPolicy interestResultPolicy, boolean isDurable,
-      boolean receiveUpdatesAsInvalidates) {
+  private void processSingleInterest(final @NotNull Object key,
+      final @NotNull InterestType interestType,
+      final @NotNull InterestResultPolicy interestResultPolicy, final boolean isDurable,
+      final boolean receiveUpdatesAsInvalidates) {
     final ServerRegionProxy proxy = getServerProxy();
     if (proxy == null) {
       throw new UnsupportedOperationException(
@@ -3784,16 +3789,16 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
         bo.beforeInterestRegistration();
       } // Test Code Ends
 
-      final byte regionDataPolicy = getAttributes().getDataPolicy().ordinal;
-      List serverKeys;
+      final DataPolicy regionDataPolicy = getAttributes().getDataPolicy();
+      List<List<Object>> serverKeys;
 
       switch (interestType) {
-        case InterestType.FILTER_CLASS:
+        case FILTER_CLASS:
           serverKeys = proxy.registerInterest(key, interestType, interestResultPolicy, isDurable,
               receiveUpdatesAsInvalidates, regionDataPolicy);
           break;
 
-        case InterestType.KEY:
+        case KEY:
           if (key instanceof String && key.equals("ALL_KEYS")) {
             logger.warn(
                 "Usage of registerInterest('ALL_KEYS') has been deprecated.  Please use registerInterestForAllKeys()");
@@ -3803,8 +3808,9 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
             if (key instanceof List) {
               logger.warn(
                   "Usage of registerInterest(List) has been deprecated. Please use registerInterestForKeys(Iterable)");
-              serverKeys = proxy.registerInterestList((List) key, interestResultPolicy, isDurable,
-                  receiveUpdatesAsInvalidates, regionDataPolicy);
+              serverKeys =
+                  proxy.registerInterestList(uncheckedCast(key), interestResultPolicy, isDurable,
+                      receiveUpdatesAsInvalidates, regionDataPolicy);
             } else {
               serverKeys = proxy.registerInterest(key, InterestType.KEY, interestResultPolicy,
                   isDurable, receiveUpdatesAsInvalidates, regionDataPolicy);
@@ -3812,16 +3818,17 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
           }
           break;
 
-        case InterestType.OQL_QUERY:
+        case OQL_QUERY:
           serverKeys = proxy.registerInterest(key, InterestType.OQL_QUERY, interestResultPolicy,
               isDurable, receiveUpdatesAsInvalidates, regionDataPolicy);
           break;
 
-        case InterestType.REGULAR_EXPRESSION: {
+        case REGULAR_EXPRESSION: {
           String regex = (String) key;
           // compile regex throws java.util.regex.PatternSyntaxException if invalid
           // we do this before sending to the server because it's more efficient
           // and the client is not receiving exception messages properly
+          // noinspection ResultOfMethodCallIgnored
           Pattern.compile(regex);
           serverKeys = proxy.registerInterest(regex, InterestType.REGULAR_EXPRESSION,
               interestResultPolicy, isDurable, receiveUpdatesAsInvalidates, regionDataPolicy);
@@ -3841,25 +3848,25 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
         if (!finishedRefresh) {
           // unregister before throwing the exception caused by the refresh
           switch (interestType) {
-            case InterestType.FILTER_CLASS:
+            case FILTER_CLASS:
               proxy.unregisterInterest(key, interestType, false, false);
               break;
 
-            case InterestType.KEY:
+            case KEY:
               if (key instanceof String && key.equals("ALL_KEYS")) {
                 proxy.unregisterInterest(".*", InterestType.REGULAR_EXPRESSION, false, false);
               } else if (key instanceof List) {
-                proxy.unregisterInterestList((List) key, false, false);
+                proxy.unregisterInterestList(uncheckedCast(key), false, false);
               } else {
                 proxy.unregisterInterest(key, InterestType.KEY, false, false);
               }
               break;
 
-            case InterestType.OQL_QUERY:
+            case OQL_QUERY:
               proxy.unregisterInterest(key, InterestType.OQL_QUERY, false, false);
               break;
 
-            case InterestType.REGULAR_EXPRESSION: {
+            case REGULAR_EXPRESSION: {
               proxy.unregisterInterest(key, InterestType.REGULAR_EXPRESSION, false, false);
               break;
 
@@ -3971,7 +3978,8 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
    * @param allowTombstones whether to return destroyed entries
    * @return a set of the keys matching the given criterion
    */
-  public Set getKeysWithInterest(int interestType, Object interestArg, boolean allowTombstones) {
+  public Set getKeysWithInterest(final @NotNull InterestType interestType, Object interestArg,
+      boolean allowTombstones) {
     Set ret;
     if (interestType == InterestType.REGULAR_EXPRESSION) {
       if (interestArg == null || ".*".equals(interestArg)) {
@@ -4349,7 +4357,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
 
   private void logKeys(List serverKeys, InterestResultPolicy pol) {
     int totalKeys = 0;
-    StringBuffer buffer = new StringBuffer();
+    StringBuilder buffer = new StringBuilder();
     for (final Object serverKey : serverKeys) {
       List keysList = (List) serverKey;
       // The chunk can contain null data if there are no entries on the server
@@ -4365,17 +4373,17 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
           if (key instanceof VersionedObjectList) {
             Set keys = ((VersionedObjectList) key).keySet();
             for (Object k : keys) {
-              buffer.append("  ").append(k).append(getLineSeparator());
+              buffer.append("  ").append(k).append(lineSeparator());
             }
           } else {
-            buffer.append("  ").append(key).append(getLineSeparator());
+            buffer.append("  ").append(key).append(lineSeparator());
           }
         }
       }
     } // for
     if (logger.isDebugEnabled()) {
       logger.debug("{} refreshEntriesFromServerKeys count={} policy={}{}{}", this, totalKeys, pol,
-          getLineSeparator(), buffer);
+          lineSeparator(), buffer);
     }
   }
 
@@ -4388,13 +4396,14 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
    * @param interestType the interest type from {@link InterestType}
    * @param interestResultPolicy the policy from {@link InterestResultPolicy}
    */
-  public void clearKeysOfInterest(Object key, int interestType,
-      InterestResultPolicy interestResultPolicy) {
+  public void clearKeysOfInterest(final @NotNull Object key,
+      final @NotNull InterestType interestType,
+      final @NotNull InterestResultPolicy interestResultPolicy) {
     switch (interestType) {
-      case InterestType.FILTER_CLASS:
+      case FILTER_CLASS:
         clearViaFilterClass((String) key);
         break;
-      case InterestType.KEY:
+      case KEY:
         if (key instanceof String && key.equals("ALL_KEYS")) {
           clearViaRegEx(".*");
         } else if (key instanceof List) {
@@ -4403,10 +4412,10 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
           localDestroyNoCallbacks(key);
         }
         break;
-      case InterestType.OQL_QUERY:
+      case OQL_QUERY:
         clearViaQuery((String) key);
         break;
-      case InterestType.REGULAR_EXPRESSION:
+      case REGULAR_EXPRESSION:
         clearViaRegEx((String) key);
         break;
       default:
@@ -4518,7 +4527,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
       if (snapshotVersion != SNAPSHOT_VERSION) {
         throw new IllegalArgumentException(
             String.format("Unsupported snapshot version %s. Only version %s is supported.",
-                new Object[] {snapshotVersion, SNAPSHOT_VERSION}));
+                snapshotVersion, SNAPSHOT_VERSION));
       }
       for (;;) {
         Object key = DataSerializer.readObject(in);
@@ -5190,8 +5199,9 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
   }
 
   public boolean basicBridgePut(Object key, Object value, byte[] deltaBytes, boolean isObject,
-      Object callbackArg, ClientProxyMembershipID memberId, boolean fromClient,
-      EntryEventImpl clientEvent) throws TimeoutException, CacheWriterException {
+      Object callbackArg, ClientProxyMembershipID memberId,
+      EntryEventImpl clientEvent, boolean generateCallbacks)
+      throws TimeoutException, CacheWriterException {
 
     EventID eventID = clientEvent.getEventId();
     Object theCallbackArg = callbackArg;
@@ -5200,7 +5210,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
     @Released
     final EntryEventImpl event = entryEventFactory.create(this, Operation.UPDATE, key,
         null, theCallbackArg, false,
-        memberId.getDistributedMember(), true, eventID);
+        memberId.getDistributedMember(), generateCallbacks, eventID);
 
     try {
       event.setContext(memberId);
@@ -5238,6 +5248,8 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
       if (success) {
         clientEvent.setVersionTag(event.getVersionTag());
         getCachePerfStats().endPut(startPut, event.isOriginRemote());
+      } else if (clientEvent.isConcurrencyConflict() && clientEvent.getVersionTag() == null) {
+        clientEvent.setVersionTag(event.getVersionTag());
       } else {
         stopper.checkCancelInProgress(null);
       }
@@ -5547,7 +5559,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
   boolean basicUpdate(final EntryEventImpl event, final boolean ifNew, final boolean ifOld,
       final long lastModified, final boolean overwriteDestroyed)
       throws TimeoutException, CacheWriterException {
-    return this.basicUpdate(event, ifNew, ifOld, lastModified, overwriteDestroyed, true, false);
+    return basicUpdate(event, ifNew, ifOld, lastModified, overwriteDestroyed, true, false);
   }
 
   /**
@@ -5594,7 +5606,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
   public boolean virtualPut(final EntryEventImpl event, final boolean ifNew, final boolean ifOld,
       Object expectedOldValue, boolean requireOldValue, final long lastModified,
       final boolean overwriteDestroyed) throws TimeoutException, CacheWriterException {
-    return this.virtualPut(event, ifNew, ifOld, expectedOldValue, requireOldValue, lastModified,
+    return virtualPut(event, ifNew, ifOld, expectedOldValue, requireOldValue, lastModified,
         overwriteDestroyed, true, false);
   }
 
@@ -8480,8 +8492,8 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
     if (rvv != null && getDataPolicy().withStorage()) {
       if (isRvvDebugEnabled) {
         logger.trace(LogMarker.RVV_VERBOSE,
-            "waiting for my version vector to dominate{}mine={}{} other={}", getLineSeparator(),
-            getLineSeparator(), versionVector.fullToString(), rvv);
+            "waiting for my version vector to dominate{}mine={}{} other={}", lineSeparator(),
+            lineSeparator(), versionVector.fullToString(), rvv);
       }
       boolean result = versionVector.waitToDominate(rvv, this);
       if (!result) {
@@ -9008,7 +9020,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
         if (isDebugEnabled) {
           logger.debug(
               "putAll in client encountered a PutAllPartialResultException:{}{}. Adjusted keys are: {}",
-              e.getMessage(), getLineSeparator(), proxyResult.getKeys());
+              e.getMessage(), lineSeparator(), proxyResult.getKeys());
         }
         Throwable txException = e.getFailure();
         while (txException != null) {
@@ -9225,7 +9237,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
         if (isDebugEnabled) {
           logger.debug(
               "removeAll in client encountered a BulkOpPartialResultException: {}{}. Adjusted keys are: {}",
-              e.getMessage(), getLineSeparator(), proxyResult.getKeys());
+              e.getMessage(), lineSeparator(), proxyResult.getKeys());
         }
         Throwable txException = e.getFailure();
         while (txException != null) {

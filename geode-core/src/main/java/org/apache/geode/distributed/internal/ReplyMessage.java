@@ -18,15 +18,16 @@ package org.apache.geode.distributed.internal;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.NotSerializableException;
 
 import org.apache.logging.log4j.Logger;
 
 import org.apache.geode.CancelException;
-import org.apache.geode.DataSerializer;
 import org.apache.geode.InvalidDeltaException;
 import org.apache.geode.cache.EntryNotFoundException;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.internal.Assert;
+import org.apache.geode.internal.HeapDataOutputStream;
 import org.apache.geode.internal.cache.versions.ConcurrentCacheModificationException;
 import org.apache.geode.internal.serialization.DeserializationContext;
 import org.apache.geode.internal.serialization.SerializationContext;
@@ -58,28 +59,28 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
   protected transient boolean internal;
 
   public void setProcessorId(int id) {
-    this.processorId = id;
+    processorId = id;
   }
 
   @Override
   public boolean sendViaUDP() {
-    return this.sendViaJGroups;
+    return sendViaJGroups;
   }
 
   public void setException(ReplyException ex) {
-    this.returnValue = ex;
-    this.returnValueIsException = true;
+    returnValue = ex;
+    returnValueIsException = true;
   }
 
   public void setReturnValue(Object o) {
-    this.returnValue = o;
-    this.returnValueIsException = false;
+    returnValue = o;
+    returnValueIsException = false;
   }
 
   /** ReplyMessages are always processed in-line, though subclasses are not */
   @Override
   public boolean getInlineProcess() {
-    return this.getClass().equals(ReplyMessage.class);
+    return getClass().equals(ReplyMessage.class);
   }
 
   /** Send an ack */
@@ -194,7 +195,7 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
     final long startTime = getTimestamp();
     ReplyProcessor21 processor = ReplyProcessor21.getProcessor(processorId);
     try {
-      this.process(dm, processor);
+      process(dm, processor);
 
       if (DistributionStats.enableClockStats) {
         dm.getStats().incReplyMessageTime(DistributionStats.getStatTime() - startTime);
@@ -211,24 +212,24 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
     if (processor == null) {
       return;
     }
-    processor.process(ReplyMessage.this);
+    processor.process(this);
   }
 
   public Object getReturnValue() {
-    if (this.returnValueIsException) {
+    if (returnValueIsException) {
       return null;
     } else {
-      return this.returnValue;
+      return returnValue;
     }
   }
 
   public ReplyException getException() {
-    if (this.returnValueIsException) {
-      ReplyException exception = (ReplyException) this.returnValue;
+    if (returnValueIsException) {
+      ReplyException exception = (ReplyException) returnValue;
       if (exception != null) {
-        InternalDistributedMember sendr = getSender();
-        if (sendr != null) {
-          exception.setSenderIfNull(sendr);
+        InternalDistributedMember sender = getSender();
+        if (sender != null) {
+          exception.setSenderIfNull(sender);
         }
       }
       return exception;
@@ -238,11 +239,11 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
   }
 
   public boolean getIgnored() {
-    return this.ignored;
+    return ignored;
   }
 
   public boolean getClosed() {
-    return this.closed;
+    return closed;
   }
 
   ////////////////////// Utility Methods //////////////////////
@@ -273,30 +274,48 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
       SerializationContext context) throws IOException {
     super.toData(out, context);
 
+    HeapDataOutputStream hdos = null;
+    boolean failedSerialization = false;
+    final boolean hasReturnValue = returnValueIsException || returnValue != null;
+    if (hasReturnValue) {
+      hdos = new HeapDataOutputStream(context.getSerializationVersion());
+      try {
+        context.getSerializer().writeObject(returnValue, hdos);
+      } catch (NotSerializableException e) {
+        logger.warn("Unable to serialize a reply to " + getRecipientsDescription(), e);
+        failedSerialization = true;
+        returnValue = new ReplyException(e);
+        returnValueIsException = true;
+      }
+    }
     byte status = 0;
-    if (this.ignored) {
+    if (ignored) {
       status |= IGNORED_FLAG;
     }
-    if (this.returnValueIsException) {
+    if (returnValueIsException) {
       status |= EXCEPTION_FLAG;
-    } else if (this.returnValue != null) {
+    } else if (returnValue != null) {
       status |= OBJECT_FLAG;
     }
-    if (this.processorId != 0) {
+    if (processorId != 0) {
       status |= PROCESSOR_ID_FLAG;
     }
-    if (this.closed) {
+    if (closed) {
       status |= CLOSED_FLAG;
     }
-    if (this.internal) {
+    if (internal) {
       status |= INTERNAL_FLAG;
     }
     out.writeByte(status);
-    if (this.processorId != 0) {
+    if (processorId != 0) {
       out.writeInt(processorId);
     }
-    if (this.returnValueIsException || this.returnValue != null) {
-      DataSerializer.writeObject(this.returnValue, out);
+    if (hasReturnValue) {
+      if (failedSerialization) {
+        context.getSerializer().writeObject(returnValue, out);
+      } else {
+        hdos.sendTo(out);
+      }
     }
   }
 
@@ -305,27 +324,28 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
       DeserializationContext context) throws IOException, ClassNotFoundException {
     super.fromData(in, context);
     byte status = in.readByte();
-    this.ignored = testFlag(status, IGNORED_FLAG);
-    this.closed = testFlag(status, CLOSED_FLAG);
+    ignored = testFlag(status, IGNORED_FLAG);
+    closed = testFlag(status, CLOSED_FLAG);
     if (testFlag(status, PROCESSOR_ID_FLAG)) {
-      this.processorId = in.readInt();
+      processorId = in.readInt();
     }
     if (testFlag(status, EXCEPTION_FLAG)) {
-      this.returnValue = DataSerializer.readObject(in);
-      this.returnValueIsException = true;
+      returnValue = context.getDeserializer().readObject(in);
+      returnValueIsException = true;
     } else if (testFlag(status, OBJECT_FLAG)) {
-      this.returnValue = DataSerializer.readObject(in);
+      returnValue = context.getDeserializer().readObject(in);
+      returnValueIsException = (returnValue instanceof ReplyException);
     }
-    this.internal = testFlag(status, INTERNAL_FLAG);
+    internal = testFlag(status, INTERNAL_FLAG);
   }
 
   protected StringBuilder getStringBuilder() {
     StringBuilder sb = new StringBuilder();
     sb.append(getShortClassName());
     sb.append(" processorId=");
-    sb.append(this.processorId);
+    sb.append(processorId);
     sb.append(" from ");
-    sb.append(this.getSender());
+    sb.append(getSender());
     ReplyException ex = getException();
     if (ex != null) {
       if (ex.getCause() != null && ex.getCause() instanceof InvalidDeltaException) {
@@ -340,7 +360,7 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
 
   @Override
   public boolean isInternal() {
-    return this.internal;
+    return internal;
   }
 
   @Override

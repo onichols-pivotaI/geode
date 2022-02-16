@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.logging.log4j.Logger;
 
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.Cache;
@@ -50,6 +51,7 @@ import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.internal.cache.execute.AbstractExecution;
 import org.apache.geode.internal.classloader.ClassPathLoader;
 import org.apache.geode.internal.serialization.KnownVersion;
+import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.management.DistributedRegionMXBean;
 import org.apache.geode.management.ManagementService;
 import org.apache.geode.management.internal.MBeanJMXAdapter;
@@ -57,20 +59,22 @@ import org.apache.geode.management.internal.exceptions.UserErrorException;
 import org.apache.geode.management.internal.i18n.CliStrings;
 
 public class ManagementUtils {
+
+  private static final Logger logger = LogService.getLogger();
+
   @Immutable
   public static final FileFilter JAR_FILE_FILTER = new CustomFileFilter(".jar");
 
   /**
    * Returns a set of all the members of the distributed system excluding locators.
    */
-  @SuppressWarnings("unchecked")
   public static Set<DistributedMember> getAllNormalMembers(InternalCache cache) {
-    return new HashSet<DistributedMember>(
+    return new HashSet<>(
         cache.getDistributionManager().getNormalDistributionManagerIds());
   }
 
   public static Set<DistributedMember> getAllLocators(InternalCache cache) {
-    return new HashSet<DistributedMember>(
+    return new HashSet<>(
         cache.getDistributionManager().getLocatorDistributionManagerIds());
   }
 
@@ -78,7 +82,6 @@ public class ManagementUtils {
    * Returns a set of all the members of the distributed system of a specific version excluding
    * locators.
    */
-  @SuppressWarnings("unchecked")
   public static Set<DistributedMember> getNormalMembersWithSameOrNewerVersion(InternalCache cache,
       KnownVersion version) {
     return getAllNormalMembers(cache).stream().filter(
@@ -90,14 +93,12 @@ public class ManagementUtils {
   /**
    * Returns a set of all the members of the distributed system including locators.
    */
-  @SuppressWarnings("unchecked")
   public static Set<DistributedMember> getAllMembers(InternalCache cache) {
     return getAllMembers(cache.getInternalDistributedSystem());
   }
 
-  @SuppressWarnings("unchecked")
   public static Set<DistributedMember> getAllMembers(InternalDistributedSystem internalDS) {
-    return new HashSet<DistributedMember>(
+    return new HashSet<>(
         internalDS.getDistributionManager().getDistributionManagerIds());
   }
 
@@ -162,14 +163,22 @@ public class ManagementUtils {
     Set<Region<?, ?>> rootRegions = cache.rootRegions();
 
     for (Region<?, ?> rootRegion : rootRegions) {
-      regionNames.add(rootRegion.getFullPath().substring(1));
+      try {
+        Set<Region<?, ?>> subRegions = rootRegion.subregions(true);
 
-      Set<Region<?, ?>> subRegions = rootRegion.subregions(true);
+        for (Region<?, ?> subRegion : subRegions) {
+          regionNames.add(subRegion.getFullPath().substring(1));
+        }
 
-      for (Region<?, ?> subRegion : subRegions) {
-        regionNames.add(subRegion.getFullPath().substring(1));
+      } catch (Exception e) {
+        logger.debug("Cannot get subregions of " + rootRegion.getFullPath()
+            + ". Omitting from the set of region names.", e);
+        continue;
       }
+
+      regionNames.add(rootRegion.getFullPath().substring(1));
     }
+
     return regionNames;
   }
 
@@ -333,7 +342,7 @@ public class ManagementUtils {
    */
   public static Set<DistributedMember> findMembers(String[] groups, String[] members,
       DistributionManager distributionManager) {
-    Set<DistributedMember> allNormalMembers = new HashSet<DistributedMember>(
+    Set<DistributedMember> allNormalMembers = new HashSet<>(
         distributionManager.getNormalDistributionManagerIds());
 
     return findMembers(allNormalMembers, groups, members);
@@ -385,7 +394,7 @@ public class ManagementUtils {
   }
 
   static class CustomFileFilter implements FileFilter {
-    private String extensionWithDot;
+    private final String extensionWithDot;
 
     public CustomFileFilter(String extensionWithDot) {
       this.extensionWithDot = extensionWithDot;

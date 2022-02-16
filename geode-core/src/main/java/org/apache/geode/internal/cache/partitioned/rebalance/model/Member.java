@@ -14,11 +14,14 @@
  */
 package org.apache.geode.internal.cache.partitioned.rebalance.model;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
 import org.apache.logging.log4j.Logger;
 
+import org.apache.geode.annotations.VisibleForTesting;
+import org.apache.geode.distributed.internal.DistributionManager;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 
@@ -40,7 +43,9 @@ public class Member implements Comparable<Member> {
   private final boolean isCritical;
   private final boolean enforceLocalMaxMemory;
 
-  Member(AddressComparor addressComparor, InternalDistributedMember memberId, boolean isCritical,
+  @VisibleForTesting
+  public Member(AddressComparor addressComparor, InternalDistributedMember memberId,
+      boolean isCritical,
       boolean enforceLocalMaxMemory) {
     this.addressComparor = addressComparor;
     this.memberId = memberId;
@@ -48,12 +53,51 @@ public class Member implements Comparable<Member> {
     this.enforceLocalMaxMemory = enforceLocalMaxMemory;
   }
 
-  Member(AddressComparor addressComparor, InternalDistributedMember memberId, float weight,
+  @VisibleForTesting
+  public Member(AddressComparor addressComparor, InternalDistributedMember memberId, float weight,
       long localMaxMemory, boolean isCritical, boolean enforceLocalMaxMemory) {
     this(addressComparor, memberId, isCritical, enforceLocalMaxMemory);
     this.weight = weight;
     this.localMaxMemory = localMaxMemory;
   }
+
+  /**
+   * Check to see if the member is the last copy of the bucket in the redundancy zone
+   *
+   * @param bucket -- bucket to be deleted from the member
+   * @param distributionManager -- used to check members of redundancy zones
+   */
+  public RefusalReason canDelete(Bucket bucket, DistributionManager distributionManager) {
+    // This code only applies to Clusters.
+    String myRedundancyZone = distributionManager.getRedundancyZone(memberId);
+
+    if (myRedundancyZone == null) {
+      // Not using redundancy zones, so...
+      return RefusalReason.NONE;
+    }
+
+    for (Member member : bucket.getMembersHosting()) {
+      // Don't look at yourself because you are not redundant for yourself
+      if (member.getMemberId().equals(getMemberId())) {
+        continue;
+      }
+
+      String memberRedundancyZone = distributionManager.getRedundancyZone(member.memberId);
+      if (memberRedundancyZone == null) {
+        // Not using redundancy zones, so...
+        continue;
+      }
+
+      // Does the member redundancy zone match my redundancy zone?
+      // if so we are not the last in the redundancy zone.
+      if (memberRedundancyZone.equals(myRedundancyZone)) {
+        return RefusalReason.NONE;
+      }
+    }
+
+    return RefusalReason.LAST_MEMBER_IN_ZONE;
+  }
+
 
   /**
    * @param sourceMember the member we will be moving this bucket off of
@@ -90,7 +134,7 @@ public class Member implements Comparable<Member> {
     }
 
     // check the localMaxMemory
-    if (this.enforceLocalMaxMemory && this.totalBytes + bucket.getBytes() > this.localMaxMemory) {
+    if (enforceLocalMaxMemory && totalBytes + bucket.getBytes() > localMaxMemory) {
       if (logger.isDebugEnabled()) {
         logger.debug("Member {} won't host bucket {} because it doesn't have enough space", this,
             bucket);
@@ -112,8 +156,8 @@ public class Member implements Comparable<Member> {
   public boolean addBucket(Bucket bucket) {
     if (getBuckets().add(bucket)) {
       bucket.addMember(this);
-      this.totalBytes += bucket.getBytes();
-      this.totalLoad += bucket.getLoad();
+      totalBytes += bucket.getBytes();
+      totalLoad += bucket.getLoad();
       return true;
     }
     return false;
@@ -122,8 +166,8 @@ public class Member implements Comparable<Member> {
   public boolean removeBucket(Bucket bucket) {
     if (getBuckets().remove(bucket)) {
       bucket.removeMember(this);
-      this.totalBytes -= bucket.getBytes();
-      this.totalLoad -= bucket.getLoad();
+      totalBytes -= bucket.getBytes();
+      totalLoad -= bucket.getLoad();
       return true;
     }
     return false;
@@ -131,7 +175,7 @@ public class Member implements Comparable<Member> {
 
   public boolean removePrimary(Bucket bucket) {
     if (getPrimaryBuckets().remove(bucket)) {
-      this.totalPrimaryLoad -= bucket.getPrimaryLoad();
+      totalPrimaryLoad -= bucket.getPrimaryLoad();
       return true;
     }
     return false;
@@ -139,7 +183,7 @@ public class Member implements Comparable<Member> {
 
   public boolean addPrimary(Bucket bucket) {
     if (getPrimaryBuckets().add(bucket)) {
-      this.totalPrimaryLoad += bucket.getPrimaryLoad();
+      totalPrimaryLoad += bucket.getPrimaryLoad();
       return true;
     }
     return false;
@@ -150,7 +194,7 @@ public class Member implements Comparable<Member> {
   }
 
   public long getConfiguredMaxMemory() {
-    return this.localMaxMemory;
+    return localMaxMemory;
   }
 
   public InternalDistributedMember getDistributedMember() {
@@ -160,7 +204,7 @@ public class Member implements Comparable<Member> {
   public int getPrimaryCount() {
     int primaryCount = 0;
     for (Bucket bucket : getBuckets()) {
-      if (this.equals(bucket.getPrimary())) {
+      if (equals(bucket.getPrimary())) {
         primaryCount++;
       }
     }
@@ -168,15 +212,15 @@ public class Member implements Comparable<Member> {
   }
 
   public long getSize() {
-    return this.totalBytes;
+    return totalBytes;
   }
 
   public float getTotalLoad() {
-    return this.totalLoad;
+    return totalLoad;
   }
 
   public float getWeight() {
-    return this.weight;
+    return weight;
   }
 
   @Override
@@ -185,19 +229,19 @@ public class Member implements Comparable<Member> {
   }
 
   public float getPrimaryLoad() {
-    return this.totalPrimaryLoad;
+    return totalPrimaryLoad;
   }
 
   public Set<Bucket> getBuckets() {
-    return this.buckets;
+    return buckets;
   }
 
   InternalDistributedMember getMemberId() {
-    return this.memberId;
+    return memberId;
   }
 
   Set<Bucket> getPrimaryBuckets() {
-    return this.primaryBuckets;
+    return primaryBuckets;
   }
 
   void changeLocalMaxMemory(long change) {
@@ -213,7 +257,7 @@ public class Member implements Comparable<Member> {
   }
 
   void changeTotalBytes(float change) {
-    totalBytes += (long) Math.round(change);
+    totalBytes += Math.round(change);
   }
 
   @Override
@@ -223,16 +267,19 @@ public class Member implements Comparable<Member> {
 
   @Override
   public boolean equals(Object other) {
+    if (this == other) {
+      return true;
+    }
     if (!(other instanceof Member)) {
       return false;
     }
     Member o = (Member) other;
-    return this.memberId.equals(o.memberId);
+    return Objects.equals(memberId, o.memberId);
   }
 
   @Override
   public int compareTo(Member other) {
     // memberId is InternalDistributedMember which implements Comparable
-    return this.memberId.compareTo(other.memberId);
+    return memberId.compareTo(other.memberId);
   }
 }

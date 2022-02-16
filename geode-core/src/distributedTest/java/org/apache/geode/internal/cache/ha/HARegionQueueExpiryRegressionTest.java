@@ -18,7 +18,6 @@ import static org.apache.geode.cache30.ClientServerTestCase.configureConnectionP
 import static org.apache.geode.distributed.ConfigurationProperties.LOCATORS;
 import static org.apache.geode.distributed.ConfigurationProperties.MCAST_PORT;
 import static org.apache.geode.internal.cache.tier.sockets.ConflationDUnitTestHelper.setIsSlowStart;
-import static org.apache.geode.internal.lang.SystemPropertyHelper.GEODE_PREFIX;
 import static org.apache.geode.internal.lang.SystemPropertyHelper.HA_REGION_QUEUE_EXPIRY_TIME_PROPERTY;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
 import static org.apache.geode.test.dunit.Host.getHost;
@@ -44,6 +43,7 @@ import org.apache.geode.cache.DataPolicy;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.Scope;
 import org.apache.geode.cache.server.CacheServer;
+import org.apache.geode.internal.lang.SystemProperty;
 import org.apache.geode.test.dunit.VM;
 import org.apache.geode.test.dunit.cache.CacheTestCase;
 import org.apache.geode.test.dunit.rules.DistributedRestoreSystemProperties;
@@ -97,9 +97,9 @@ public class HARegionQueueExpiryRegressionTest extends CacheTestCase {
     hostName = getServerHostName(getHost(0));
 
     server.invoke(() -> setIsSlowStart());
-    serverPort = server.invoke(() -> createServerCache());
+    serverPort = server.invoke(this::createServerCache);
 
-    client.invoke(() -> createClientCache());
+    client.invoke(this::createClientCache);
 
     addIgnoredException("Unexpected IOException");
     addIgnoredException("Connection reset");
@@ -124,12 +124,13 @@ public class HARegionQueueExpiryRegressionTest extends CacheTestCase {
    */
   @Test
   public void allEventsShouldReachClientWithoutExpiring() throws Exception {
-    server.invoke(() -> generateEvents());
-    client.invoke(() -> validateEventCountAtClient());
+    server.invoke(this::generateEvents);
+    client.invoke(this::validateEventCountAtClient);
   }
 
   private int createServerCache() throws IOException {
-    System.setProperty(GEODE_PREFIX + HA_REGION_QUEUE_EXPIRY_TIME_PROPERTY, String.valueOf(1));
+    System.setProperty(SystemProperty.DEFAULT_PREFIX + HA_REGION_QUEUE_EXPIRY_TIME_PROPERTY,
+        String.valueOf(1));
     System.setProperty("slowStartTimeForTesting", String.valueOf(DISPATCHER_SLOWSTART_TIME));
 
     AttributesFactory factory = new AttributesFactory();

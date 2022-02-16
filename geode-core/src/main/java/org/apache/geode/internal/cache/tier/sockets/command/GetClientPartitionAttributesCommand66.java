@@ -17,6 +17,8 @@ package org.apache.geode.internal.cache.tier.sockets.command;
 import java.io.IOException;
 import java.util.Set;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.FixedPartitionAttributes;
@@ -49,10 +51,10 @@ public class GetClientPartitionAttributesCommand66 extends BaseCommand {
 
   GetClientPartitionAttributesCommand66() {}
 
-  @SuppressWarnings("unchecked")
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start)
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start)
       throws IOException, ClassNotFoundException, InterruptedException {
     String regionFullPath = null;
     regionFullPath = clientMessage.getPart(0).getCachedString();
@@ -61,7 +63,7 @@ public class GetClientPartitionAttributesCommand66 extends BaseCommand {
       logger.warn("The input region path for the GetClientPartitionAttributes request is null");
       errMessage = "The input region path for the GetClientPartitionAttributes request is null";
       writeErrorResponse(clientMessage, MessageType.GET_CLIENT_PARTITION_ATTRIBUTES_ERROR,
-          errMessage.toString(), serverConnection);
+          errMessage, serverConnection);
       serverConnection.setAsTrue(RESPONDED);
       return;
     }
@@ -74,7 +76,7 @@ public class GetClientPartitionAttributesCommand66 extends BaseCommand {
           "Region was not found during GetClientPartitionAttributes request for region path : "
               + regionFullPath;
       writeErrorResponse(clientMessage, MessageType.GET_CLIENT_PARTITION_ATTRIBUTES_ERROR,
-          errMessage.toString(), serverConnection);
+          errMessage, serverConnection);
       serverConnection.setAsTrue(RESPONDED);
       return;
     }

@@ -58,6 +58,9 @@
 
 {% macro common_instance_params(test) -%}
 GCP_PROJECT: ((gcp-project))
+GCP_NETWORK: ((gcp-network))
+GCP_SUBNETWORK: ((gcp-subnet))
+GCP_ZONE: ((gcp-zone))
 CPUS: {{ test.CPUS }}
 RAM: {{ test.RAM }}
 DISK: {{ test.DISK }}
@@ -86,13 +89,13 @@ GRADLE_GLOBAL_ARGS: ((gradle-global-args))
 
 
 resources:
-- name: weekly
+- name: weekly-fri
   type: time
   source:
-    interval: 168h
+    interval: 62m
     days: [Friday]
-    start: 5PM
-    stop: 11PM
+    start: 5:00 PM
+    stop: 6:02 PM
     location: America/Los_Angeles
 - name: test-finish-time
   type: time
@@ -166,7 +169,7 @@ jobs:
   serial: true
   plan:
   - in_parallel:
-    - get: weekly
+    - get: weekly-fri
       trigger: true
     - get: geode
       params:
@@ -175,12 +178,13 @@ jobs:
       params:
         depth: 1
     - get: geode-build-version
+    - get: linux-builder-image-family
 
 - name: trigger-mass-run
   serial: true
   plan:
   - in_parallel:
-    - get: weekly
+    - get: weekly-fri
       trigger: true
       passed: [pin-geode]
     - get: alpine-tools-image
@@ -226,6 +230,7 @@ jobs:
       - get: alpine-tools-image
         passed: [trigger-mass-run]
       - get: {{ test.PLATFORM}}-builder-image-family
+        passed: [pin-geode]
     - do:
       {{ init_retry()|indent(6) }}
       - task: create_instance-{{java_test_version.name}}
@@ -353,7 +358,7 @@ jobs:
     - get: geode
       passed: [{{test.name}}-test-{{java_test_version.name}}]
     - get: alpine-tools-image
-      passed: [trigger-mass-run]
+      passed: [distributed-test-openjdk8]
     - get: test-finish-time
       passed: [{{test.name}}-test-{{java_test_version.name}}]
       trigger: true
@@ -414,6 +419,7 @@ jobs:
       passed: [poll-for-test-completion]
       trigger: true
   - task: create-job-performance-report
+    timeout: 15m
     image: alpine-tools-image
     config:
       platform: linux

@@ -99,7 +99,7 @@ public class PRQueryCacheClosedJUnitTest {
     final Region<Integer, PortfolioData> localRegion =
         PartitionedRegionTestHelper.createLocalRegion(localRegionName);
 
-    final StringBuffer errorBuf = new StringBuffer();
+    final StringBuilder errorBuf = new StringBuilder();
 
     PortfolioData[] portfolios = new PortfolioData[dataSize];
 
@@ -128,13 +128,13 @@ public class PRQueryCacheClosedJUnitTest {
         logger.info("<ExpectedException action=add>" + expectedCacheClosedException
             + "</ExpectedException>");
 
-        for (String s : queryString) {
+        for (final String s : queryString) {
 
           try {
 
-            SelectResults<PortfolioData> resSetPR = region.query(s);
+            SelectResults resSetPR = region.query(s);
 
-            SelectResults<PortfolioData> resSetLocal = localRegion.query(s);
+            SelectResults resSetLocal = localRegion.query(s);
 
             String failureString =
                 PartitionedRegionTestHelper.compareResultSets(resSetPR, resSetLocal);

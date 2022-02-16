@@ -87,10 +87,6 @@ public class HARegion extends DistributedRegion {
     return buf;
   }
 
-  // protected Object conditionalCopy(Object o) {
-  // return o;
-  // }
-
   private volatile HARegionQueue owningQueue;
 
   HARegion(String regionName, RegionAttributes attrs, LocalRegion parentRegion,
@@ -99,7 +95,7 @@ public class HARegion extends DistributedRegion {
         new InternalRegionArguments().setDestroyLockFlag(true).setRecreateFlag(false)
             .setSnapshotInputStream(null).setImageTarget(null),
         statisticsClock);
-    this.haRegionStats = new DummyCachePerfStats();
+    haRegionStats = new DummyCachePerfStats();
   }
 
   @Override
@@ -147,17 +143,17 @@ public class HARegion extends DistributedRegion {
           "timeToLive must not be null");
     }
     if ((timeToLive.getAction() == ExpirationAction.LOCAL_DESTROY
-        && this.getDataPolicy().withReplication())) {
+        && getDataPolicy().withReplication())) {
       throw new IllegalArgumentException(
           "timeToLive action is incompatible with this region's mirror type");
     }
-    if (!this.statisticsEnabled) {
+    if (!statisticsEnabled) {
       throw new IllegalStateException(
           "Cannot set time to live when statistics are disabled");
     }
     ExpirationAttributes oldAttrs = getEntryTimeToLive();
-    this.entryTimeToLive = timeToLive.getTimeout();
-    this.entryTimeToLiveExpirationAction = timeToLive.getAction();
+    entryTimeToLive = timeToLive.getTimeout();
+    entryTimeToLiveExpirationAction = timeToLive.getAction();
     setEntryTimeToLiveAttributes();
     updateEntryExpiryPossible();
     timeToLiveChanged(oldAttrs);
@@ -177,31 +173,24 @@ public class HARegion extends DistributedRegion {
       final boolean forceNewEntry) throws EntryNotFoundException {
     Object key = event.getKey();
     if (key instanceof Long) {
-      boolean removedFromAvID = false;
-      Conflatable conflatable = null;
-      try {
-        conflatable = (Conflatable) this.get(key);
-        removedFromAvID =
-            !this.owningQueue.isPrimary() && this.owningQueue.destroyFromAvailableIDs((Long) key);
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
-        getCancelCriterion().checkCancelInProgress(ie);
-        return;
-      }
+      boolean removedFromAvID;
+      Conflatable conflatable;
+      conflatable = (Conflatable) get(key);
+      removedFromAvID =
+          !owningQueue.isPrimary() && owningQueue.destroyFromAvailableIDs((Long) key);
       if (!removedFromAvID) {
         return;
       }
 
       // <HA overflow>
       if (conflatable instanceof HAEventWrapper) {
-        this.owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) conflatable, "Invalidate");
+        owningQueue.decAndRemoveFromHAContainer((HAEventWrapper) conflatable, "Invalidate");
       }
       // </HA overflow>
       // update the stats
-      this.owningQueue.stats.incEventsExpired();
+      owningQueue.stats.incEventsExpired();
     }
-    this.entries.invalidate(event, invokeCallbacks, forceNewEntry, false);
-    return;
+    entries.invalidate(event, invokeCallbacks, forceNewEntry, false);
 
   }
 
@@ -261,18 +250,11 @@ public class HARegion extends DistributedRegion {
     return (HARegion) region;
   }
 
-  public boolean isPrimaryQueue() {
-    if (this.owningQueue != null) {
-      return this.owningQueue.isPrimary();
-    }
-    return false;
-  }
-
   public HARegionQueue getOwner() {
     // fix for bug #41634 - don't release a reference to the owning queue until
     // it is fully initialized. The previous implementation of this rule did
     // not protect subclasses of HARegionQueue and caused the bug.
-    return this.owningQueue.isQueueInitialized() ? this.owningQueue : null;
+    return owningQueue.isQueueInitialized() ? owningQueue : null;
   }
 
   public HARegionQueue getOwnerWithWait(long timeout) {
@@ -289,7 +271,7 @@ public class HARegion extends DistributedRegion {
 
   @Override
   public CachePerfStats getCachePerfStats() {
-    return this.haRegionStats;
+    return haRegionStats;
   }
 
   /**
@@ -299,7 +281,7 @@ public class HARegion extends DistributedRegion {
    * @param hrq The owning HARegionQueue instance
    */
   public void setOwner(HARegionQueue hrq) {
-    this.owningQueue = hrq;
+    owningQueue = hrq;
   }
 
   @Override
@@ -307,13 +289,6 @@ public class HARegion extends DistributedRegion {
     return false;
   }
 
-  // re-implemented from LocalRegion to avoid recording the event in GemFireCache
-  // before it's applied to the cache's region
-  // public boolean hasSeenClientEvent(InternalCacheEvent event) {
-  // return false;
-  // }
-
-  protected void notifyGatewayHub(EnumListenerEvent operation, EntryEventImpl event) {}
 
   /**
    * This method is overriden so as to make isOriginRemote true always so that the operation is
@@ -345,11 +320,7 @@ public class HARegion extends DistributedRegion {
       throws TimeoutException, IOException, ClassNotFoundException {
     // Set this region in the ProxyBucketRegion early so that profile exchange will
     // perform the correct fillInProfile method
-    // try {
     super.initialize(snapshotInputStream, imageTarget, internalRegionArgs);
-    // } finally {
-    // this.giiProviderStates = null;
-    // }
   }
 
   /**
@@ -392,8 +363,6 @@ public class HARegion extends DistributedRegion {
           } finally {
             event.release();
           }
-          if (txState == null) {
-          }
         } catch (CacheWriterException cwe) {
           // @todo smenon Log the exception
         }
@@ -411,7 +380,7 @@ public class HARegion extends DistributedRegion {
   public void startServingGIIRequest() {
     // some of our dunit tests create HARegions in odd ways that cause owningQueue
     // to be null during GII
-    if (this.owningQueue == null) {
+    if (owningQueue == null) {
       if (logger.isDebugEnabled()) {
         logger.debug(
             "found that owningQueue was null during GII of {} which could lead to event loss (see #41681)",
@@ -419,15 +388,15 @@ public class HARegion extends DistributedRegion {
       }
       return;
     }
-    this.owningQueue.startGiiQueueing();
+    owningQueue.startGiiQueueing();
   }
 
   /**
    * invoked when we finish providing a GII image
    */
   public void endServingGIIRequest() {
-    if (this.owningQueue != null) {
-      this.owningQueue.endGiiQueueing();
+    if (owningQueue != null) {
+      owningQueue.endGiiQueueing();
     }
   }
 
@@ -443,9 +412,9 @@ public class HARegion extends DistributedRegion {
     super.fillInProfile(profile);
     HARegionAdvisor.HAProfile h = (HARegionAdvisor.HAProfile) profile;
     // dunit tests create HARegions without encapsulating them in queues
-    if (this.owningQueue != null) {
-      h.isPrimary = this.owningQueue.isPrimary();
-      h.hasRegisteredInterest = this.owningQueue.getHasRegisteredInterest();
+    if (owningQueue != null) {
+      h.isPrimary = owningQueue.isPrimary();
+      h.hasRegisteredInterest = owningQueue.getHasRegisteredInterest();
     }
   }
 
@@ -456,13 +425,13 @@ public class HARegion extends DistributedRegion {
    */
   @Override
   public Map<? extends DataSerializable, ? extends DataSerializable> getEventState() {
-    if (this.owningQueue != null) {
-      return this.owningQueue.getEventMapForGII();
+    if (owningQueue != null) {
+      return owningQueue.getEventMapForGII();
     }
     return null;
   }
 
-  /*
+  /**
    * Record cache event state for a potential initial image provider. This is used to install event
    * state when the sender is selected as initial image provider.
    *
@@ -470,8 +439,8 @@ public class HARegion extends DistributedRegion {
    */
   @Override
   void recordEventState(InternalDistributedMember sender, Map eventState) {
-    if (eventState != null && this.owningQueue != null) {
-      this.owningQueue.recordEventState(sender, eventState);
+    if (eventState != null && owningQueue != null) {
+      owningQueue.recordEventState(sender, eventState);
     }
   }
 
@@ -487,12 +456,12 @@ public class HARegion extends DistributedRegion {
    * present
    */
   public boolean noPrimaryOrHasRegisteredInterest() {
-    return ((HARegionAdvisor) this.distAdvisor).noPrimaryOrHasRegisteredInterest();
+    return ((HARegionAdvisor) distAdvisor).noPrimaryOrHasRegisteredInterest();
   }
 
   public Object updateHAEventWrapper(InternalDistributedMember sender,
       CachedDeserializable newValueCd) {
-    return this.owningQueue.updateHAEventWrapper(sender, newValueCd, getName());
+    return owningQueue.updateHAEventWrapper(sender, newValueCd, getName());
   }
 
   /** HARegions have their own advisors so that interest registration state can be tracked */
@@ -517,7 +486,7 @@ public class HARegion extends DistributedRegion {
     @Override
     public InitialImageAdvice adviseInitialImage(InitialImageAdvice previousAdvice) {
       InitialImageAdvice r = super.adviseInitialImage(previousAdvice);
-      r.setOthers(this.getAdvisee().getDistributionManager().getOtherDistributionManagerIds());
+      r.setOthers(getAdvisee().getDistributionManager().getOtherDistributionManagerIds());
       return r;
     }
 
@@ -527,9 +496,9 @@ public class HARegion extends DistributedRegion {
     }
 
     public boolean noPrimaryOrHasRegisteredInterest() {
-      Profile[] locProfiles = this.profiles; // grab current profiles
-      for (int i = 0; i < locProfiles.length; i++) {
-        HAProfile p = (HAProfile) locProfiles[i];
+      Profile[] locProfiles = profiles; // grab current profiles
+      for (Profile locProfile : locProfiles) {
+        HAProfile p = (HAProfile) locProfile;
         if (p.isPrimary) {
           return p.hasRegisteredInterest;
         }
@@ -603,8 +572,8 @@ public class HARegion extends DistributedRegion {
       @Override
       public void fillInToString(StringBuilder sb) {
         super.fillInToString(sb);
-        sb.append("; isPrimary=").append(this.isPrimary);
-        sb.append("; hasRegisteredInterest=").append(this.hasRegisteredInterest);
+        sb.append("; isPrimary=").append(isPrimary);
+        sb.append("; hasRegisteredInterest=").append(hasRegisteredInterest);
       }
     }
   }

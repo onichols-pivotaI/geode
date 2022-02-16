@@ -49,10 +49,10 @@ public class LatestLastAccessTimeMessage<K> extends PooledDistributionMessage
 
   public LatestLastAccessTimeMessage(LatestLastAccessTimeReplyProcessor replyProcessor,
       Set<InternalDistributedMember> recipients, InternalDistributedRegion region, K key) {
-    this.setRecipients(recipients);
-    this.processorId = replyProcessor.getProcessorId();
+    setRecipients(recipients);
+    processorId = replyProcessor.getProcessorId();
     this.key = key;
-    this.regionName = region.getFullPath();
+    regionName = region.getFullPath();
   }
 
   @Override
@@ -62,56 +62,56 @@ public class LatestLastAccessTimeMessage<K> extends PooledDistributionMessage
 
   @Override
   protected void process(ClusterDistributionManager dm) {
-    final InternalCache cache = dm.getCache();
-    if (cache == null) {
-      sendReply(dm, 0);
-      return;
-    }
-    final InternalDistributedRegion region =
-        (InternalDistributedRegion) cache.getRegion(this.regionName);
-    if (region == null) {
-      sendReply(dm, 0);
-      return;
-    }
-    final RegionEntry entry = region.getRegionEntry(this.key);
-    if (entry == null) {
-      sendReply(dm, 0);
-      return;
-    }
     long lastAccessed = 0L;
-    // noinspection SynchronizationOnLocalVariableOrMethodParameter
-    synchronized (entry) {
-      if (!entry.isInvalidOrRemoved()) {
-        try {
-          lastAccessed = entry.getLastAccessed();
-        } catch (InternalStatisticsDisabledException ignored) {
-          // last access time is not available
+    try {
+      final InternalCache cache = dm.getCache();
+      if (cache == null) {
+        return;
+      }
+      final InternalDistributedRegion region =
+          (InternalDistributedRegion) cache.getRegion(regionName);
+      if (region == null) {
+        return;
+      }
+      final RegionEntry entry = region.getRegionEntry(key);
+      if (entry == null) {
+        return;
+      }
+      // noinspection SynchronizationOnLocalVariableOrMethodParameter
+      synchronized (entry) {
+        if (!entry.isInvalidOrRemoved()) {
+          try {
+            lastAccessed = entry.getLastAccessed();
+          } catch (InternalStatisticsDisabledException ignored) {
+            // last access time is not available
+          }
         }
       }
+    } finally {
+      sendReply(dm, lastAccessed);
     }
-    sendReply(dm, lastAccessed);
   }
 
   @VisibleForTesting
   void sendReply(ClusterDistributionManager dm, long lastAccessTime) {
-    ReplyMessage.send(getSender(), this.processorId, lastAccessTime, dm);
+    ReplyMessage.send(getSender(), processorId, lastAccessTime, dm);
   }
 
   @Override
   public void fromData(DataInput in,
       DeserializationContext context) throws IOException, ClassNotFoundException {
     super.fromData(in, context);
-    this.processorId = DataSerializer.readPrimitiveInt(in);
-    this.regionName = DataSerializer.readString(in);
-    this.key = DataSerializer.readObject(in);
+    processorId = DataSerializer.readPrimitiveInt(in);
+    regionName = DataSerializer.readString(in);
+    key = DataSerializer.readObject(in);
   }
 
   @Override
   public void toData(DataOutput out,
       SerializationContext context) throws IOException {
     super.toData(out, context);
-    DataSerializer.writePrimitiveInt(this.processorId, out);
-    DataSerializer.writeString(this.regionName, out);
-    DataSerializer.writeObject(this.key, out);
+    DataSerializer.writePrimitiveInt(processorId, out);
+    DataSerializer.writeString(regionName, out);
+    DataSerializer.writeObject(key, out);
   }
 }

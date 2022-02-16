@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.SerializationException;
 import org.apache.geode.cache.Region;
@@ -156,18 +157,18 @@ public class GetAllOp {
      */
     public GetAllOpImpl(String region, List keys, Object callback) {
       super(callback != null ? MessageType.GET_ALL_WITH_CALLBACK : MessageType.GET_ALL_70, 3);
-      this.keyList = keys;
+      keyList = keys;
       this.callback = callback;
       getMessage().addStringPart(region, true);
     }
 
     @Override
     protected void initMessagePart() {
-      Object[] keysArray = new Object[this.keyList.size()];
-      this.keyList.toArray(keysArray);
+      Object[] keysArray = new Object[keyList.size()];
+      keyList.toArray(keysArray);
       getMessage().addObjPart(keysArray);
-      if (this.callback != null) {
-        getMessage().addObjPart(this.callback);
+      if (callback != null) {
+        getMessage().addObjPart(callback);
       } else {
         // using the old GET_ALL_70 command that expects an int saying we are not register interest
         getMessage().addIntPart(0);
@@ -175,41 +176,39 @@ public class GetAllOp {
     }
 
     public List getKeyList() {
-      return this.keyList;
+      return keyList;
     }
 
 
     @Override
-    protected Message createResponseMessage() {
+    protected @NotNull Message createResponseMessage() {
       return new ChunkedMessage(1, KnownVersion.CURRENT);
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       throw new UnsupportedOperationException();
     }
 
     @Override
-    protected Object processResponse(Message msg, final Connection con) throws Exception {
+    protected Object processResponse(final @NotNull Message msg, final @NotNull Connection con)
+        throws Exception {
       final VersionedObjectList result = new VersionedObjectList(false);
       final Exception[] exceptionRef = new Exception[1];
-      processChunkedResponse((ChunkedMessage) msg, "getAll", new ChunkHandler() {
-        @Override
-        public void handle(ChunkedMessage cm) throws Exception {
-          Part part = cm.getPart(0);
-          try {
-            Object o = part.getObject();
-            if (o instanceof Throwable) {
-              String s = "While performing a remote getAll";
-              exceptionRef[0] = new ServerOperationException(s, (Throwable) o);
-            } else {
-              VersionedObjectList chunk = (VersionedObjectList) o;
-              chunk.replaceNullIDs(con.getEndpoint().getMemberId());
-              result.addAll(chunk);
-            }
-          } catch (Exception e) {
-            exceptionRef[0] = new ServerOperationException("Unable to deserialize value", e);
+      processChunkedResponse((ChunkedMessage) msg, "getAll", cm -> {
+        Part part = cm.getPart(0);
+        try {
+          Object o = part.getObject();
+          if (o instanceof Throwable) {
+            String s = "While performing a remote getAll";
+            exceptionRef[0] = new ServerOperationException(s, (Throwable) o);
+          } else {
+            VersionedObjectList chunk = (VersionedObjectList) o;
+            chunk.replaceNullIDs(con.getEndpoint().getMemberId());
+            result.addAll(chunk);
           }
+        } catch (Exception e) {
+          exceptionRef[0] = new ServerOperationException("Unable to deserialize value", e);
         }
       });
       if (exceptionRef[0] != null) {

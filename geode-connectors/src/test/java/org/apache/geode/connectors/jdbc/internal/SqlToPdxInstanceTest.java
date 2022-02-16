@@ -28,7 +28,6 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Date;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Before;
 import org.junit.Test;
@@ -38,8 +37,9 @@ import org.apache.geode.connectors.jdbc.JdbcConnectorException;
 import org.apache.geode.pdx.FieldType;
 import org.apache.geode.pdx.PdxInstance;
 import org.apache.geode.pdx.WritablePdxInstance;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class SqlToPdxInstanceTest {
 
   private static final String COLUMN_NAME_1 = "columnName1";
@@ -51,7 +51,7 @@ public class SqlToPdxInstanceTest {
   private final WritablePdxInstance writablePdxInstance = mock(WritablePdxInstance.class);
 
   private ResultSet resultSet;
-  private ResultSetMetaData metaData = mock(ResultSetMetaData.class);
+  private final ResultSetMetaData metaData = mock(ResultSetMetaData.class);
 
   @Before
   public void setup() throws Exception {
@@ -115,7 +115,7 @@ public class SqlToPdxInstanceTest {
     when(resultSet.getString(2)).thenReturn("column2");
     sqlToPdxInstance.addMapping(COLUMN_NAME_2, PDX_FIELD_NAME_2, FieldType.STRING);
 
-    assertThatThrownBy(() -> createPdxInstance()).isInstanceOf(JdbcConnectorException.class)
+    assertThatThrownBy(this::createPdxInstance).isInstanceOf(JdbcConnectorException.class)
         .hasMessageContaining("The jdbc-mapping does not contain the column name \""
             + COLUMN_NAME_1
             + "\". This is probably caused by a column being added to the table after the jdbc-mapping was created.");
@@ -198,7 +198,7 @@ public class SqlToPdxInstanceTest {
     when(resultSet.getBlob(1)).thenReturn(blob);
     sqlToPdxInstance.addMapping(COLUMN_NAME_1, PDX_FIELD_NAME_1, fieldType);
 
-    assertThatThrownBy(() -> createPdxInstance()).isInstanceOf(JdbcConnectorException.class)
+    assertThatThrownBy(this::createPdxInstance).isInstanceOf(JdbcConnectorException.class)
         .hasMessageContaining(
             "Blob of length 2147483648 is too big to be converted to a byte array.");
   }
@@ -306,7 +306,7 @@ public class SqlToPdxInstanceTest {
     String returnValue = "ReturnValue";
     when(resultSet.getObject(1)).thenReturn(returnValue);
 
-    assertThatThrownBy(() -> createPdxInstance()).isInstanceOf(JdbcConnectorException.class)
+    assertThatThrownBy(this::createPdxInstance).isInstanceOf(JdbcConnectorException.class)
         .hasMessageContaining("Could not convert ");
   }
 
@@ -318,7 +318,7 @@ public class SqlToPdxInstanceTest {
     sqlToPdxInstance.addMapping(COLUMN_NAME_2, PDX_FIELD_NAME_2, FieldType.STRING);
     when(resultSet.next()).thenReturn(true);
 
-    assertThatThrownBy(() -> createPdxInstance()).isInstanceOf(JdbcConnectorException.class)
+    assertThatThrownBy(this::createPdxInstance).isInstanceOf(JdbcConnectorException.class)
         .hasMessageContaining("Multiple rows returned for query: ");
   }
 
@@ -420,7 +420,7 @@ public class SqlToPdxInstanceTest {
     return value;
   }
 
-  private static byte[][] arrayOfByteArray = new byte[][] {{1, 2}, {3, 4}};
+  private static final byte[][] arrayOfByteArray = new byte[][] {{1, 2}, {3, 4}};
 
   @SuppressWarnings("unchecked")
   private <T> T getValueByFieldType(FieldType fieldType) {

@@ -77,8 +77,7 @@ public class JarDeployer implements Serializable {
       throws IOException {
     lock.lock();
     try {
-      boolean shouldDeployNewVersion =
-          shouldDeployNewVersion(artifactId, stagedJar);
+      boolean shouldDeployNewVersion = shouldDeployNewVersion(artifactId, stagedJar);
       if (!shouldDeployNewVersion) {
         logger.debug("No need to deploy a new version of {}", stagedJar.getName());
         return null;
@@ -119,7 +118,7 @@ public class JarDeployer implements Serializable {
    */
   public void verifyWritableDeployDirectory() throws IOException {
     try {
-      if (this.deployDirectory.canWrite()) {
+      if (deployDirectory.canWrite()) {
         return;
       }
     } catch (SecurityException ex) {
@@ -127,7 +126,7 @@ public class JarDeployer implements Serializable {
     }
 
     throw new IOException(
-        "Unable to write to deploy directory: " + this.deployDirectory.getCanonicalPath());
+        "Unable to write to deploy directory: " + deployDirectory.getCanonicalPath());
   }
 
   /*
@@ -148,7 +147,7 @@ public class JarDeployer implements Serializable {
   }
 
   protected Set<File> findJarsWithOldNamingConvention() {
-    return Stream.of(this.deployDirectory.listFiles())
+    return Stream.of(deployDirectory.listFiles())
         .filter((File file) -> isOldNamingConvention(file.getName())).collect(toSet());
   }
 
@@ -167,7 +166,7 @@ public class JarDeployer implements Serializable {
     String jarVersion = matcher.group(2);
     String newJarName = unversionedJarNameWithoutExtension + ".v" + jarVersion + ".jar";
 
-    File newJar = new File(this.deployDirectory, newJarName);
+    File newJar = new File(deployDirectory, newJarName);
     logger.debug("Renaming deployed jar from {} to {}", oldJar.getCanonicalPath(),
         newJar.getCanonicalPath());
 
@@ -233,8 +232,8 @@ public class JarDeployer implements Serializable {
     try {
       if (deployedJar != null) {
         logger.info("Registering new version of jar: {}", deployedJar);
-        DeployedJar oldJar = this.deployedJars.put(artifactId, deployedJar);
-        ClassPathLoader.getLatest().chainClassloader(deployedJar.getFile(), artifactId);
+        DeployedJar oldJar = deployedJars.put(artifactId, deployedJar);
+        ClassPathLoader.getLatest().chainClassloader(deployedJar.getFile());
       }
     } finally {
       lock.unlock();
@@ -254,7 +253,7 @@ public class JarDeployer implements Serializable {
    *         already deployed.
    * @throws IOException When there's an error saving the JAR file to disk
    */
-  public DeployedJar deploy(String artifactId, final File stagedJarFile)
+  public DeployedJar deploy(final File stagedJarFile)
       throws IOException, ClassNotFoundException {
 
     if (!JarFileUtils.hasValidJarContent(stagedJarFile)) {
@@ -264,6 +263,7 @@ public class JarDeployer implements Serializable {
 
     lock.lock();
     try {
+      String artifactId = JarFileUtils.getArtifactId(stagedJarFile.getName());
       DeployedJar deployedJar = deployWithoutRegistering(artifactId, stagedJarFile);
       registerNewVersions(artifactId, deployedJar);
 
@@ -273,8 +273,8 @@ public class JarDeployer implements Serializable {
     }
   }
 
-  private boolean shouldDeployNewVersion(String deploymentName, File stagedJar) throws IOException {
-    DeployedJar oldDeployedJar = this.deployedJars.get(deploymentName);
+  private boolean shouldDeployNewVersion(String artifactId, File stagedJar) throws IOException {
+    DeployedJar oldDeployedJar = deployedJars.get(artifactId);
 
     if (oldDeployedJar == null) {
       return true;
@@ -291,7 +291,7 @@ public class JarDeployer implements Serializable {
   }
 
   public Map<String, DeployedJar> getDeployedJars() {
-    return Collections.unmodifiableMap(this.deployedJars);
+    return Collections.unmodifiableMap(deployedJars);
   }
 
   /**
@@ -336,7 +336,7 @@ public class JarDeployer implements Serializable {
     }
     logger.debug("ArtifactId to delete: {}", artifactId);
     try {
-      for (File file : this.deployDirectory.listFiles()) {
+      for (File file : deployDirectory.listFiles()) {
         logger.debug("File in deploy directory: {} with artifactId: {}", file.getName(),
             JarFileUtils.toArtifactId(file.getName()));
         if (artifactId.equals(JarFileUtils.toArtifactId(file.getName()))) {
@@ -351,10 +351,8 @@ public class JarDeployer implements Serializable {
 
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder(getClass().getName());
-    sb.append('@').append(System.identityHashCode(this)).append('{');
-    sb.append("deployDirectory=").append(deployDirectory);
-    sb.append('}');
-    return sb.toString();
+    return getClass().getName() + '@' + System.identityHashCode(this) + '{'
+        + "deployDirectory=" + deployDirectory
+        + '}';
   }
 }

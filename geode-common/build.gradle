@@ -23,16 +23,28 @@ apply from: "${project.projectDir}/../gradle/jmh.gradle"
 
 dependencies {
   // main
+  compileOnly(platform(project(':boms:geode-all-bom')))
   implementation(platform(project(':boms:geode-all-bom')))
+
+
+  compileOnly('org.jetbrains:annotations')
+
+
   implementation('com.fasterxml.jackson.core:jackson-databind')
 
   // test
+  testImplementation('com.github.stefanbirkner:system-rules') {
+    exclude module: 'junit-dep'
+  }
   testImplementation('junit:junit')
+  testImplementation('org.apache.commons:commons-lang3')
   testImplementation('org.assertj:assertj-core')
   testImplementation('org.mockito:mockito-core')
+  testRuntimeOnly('org.junit.vintage:junit-vintage-engine')
 
 
   // jmhTest
   jmhTestImplementation('junit:junit')
+  jmhTestRuntimeOnly('org.junit.vintage:junit-vintage-engine')
   jmhTestImplementation('org.assertj:assertj-core')
 }

@@ -40,7 +40,6 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.util.function.Consumer;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Rule;
 import org.junit.Test;
@@ -57,12 +56,13 @@ import org.apache.geode.cache.lucene.test.TestObject;
 import org.apache.geode.internal.cache.GemFireCacheImpl;
 import org.apache.geode.internal.cache.LocalRegion;
 import org.apache.geode.test.junit.categories.LuceneTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 /**
  * Tests of lucene index creation that use persistence
  */
 @Category({LuceneTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class LuceneIndexCreationPersistenceIntegrationTest extends LuceneIntegrationTest {
 
   @Rule
@@ -180,9 +180,9 @@ public class LuceneIndexCreationPersistenceIntegrationTest extends LuceneIntegra
   @Test
   @Parameters(method = "getRegionShortcuts")
   public void shouldHandleMultipleIndexes(RegionShortcut shortcut) throws Exception {
-    LuceneServiceProvider.get(this.cache).createIndexFactory().setFields("field1")
+    LuceneServiceProvider.get(cache).createIndexFactory().setFields("field1")
         .create(INDEX_NAME + "_1", REGION_NAME);
-    LuceneServiceProvider.get(this.cache).createIndexFactory().setFields("field2")
+    LuceneServiceProvider.get(cache).createIndexFactory().setFields("field2")
         .create(INDEX_NAME + "_2", REGION_NAME);
     Region region = cache.createRegionFactory(shortcut).create(REGION_NAME);
     region.put("key1", new TestObject());

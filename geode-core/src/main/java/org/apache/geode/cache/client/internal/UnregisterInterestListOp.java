@@ -14,8 +14,9 @@
  */
 package org.apache.geode.cache.client.internal;
 
-import java.util.Iterator;
 import java.util.List;
+
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.internal.cache.tier.MessageType;
 import org.apache.geode.internal.cache.tier.sockets.Message;
@@ -63,13 +64,13 @@ public class UnregisterInterestListOp {
         getMessage().addBytesPart(new byte[] {keepAliveByte});
       }
       getMessage().addIntPart(keys.size());
-      for (Iterator i = keys.iterator(); i.hasNext();) {
-        getMessage().addStringOrObjPart(i.next());
+      for (final Object key : keys) {
+        getMessage().addStringOrObjPart(key);
       }
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       processAck(msg, "unregisterInterestList");
       return null;
     }

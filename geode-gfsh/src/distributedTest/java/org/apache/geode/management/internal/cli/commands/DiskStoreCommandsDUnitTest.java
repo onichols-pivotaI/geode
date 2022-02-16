@@ -16,7 +16,6 @@
 package org.apache.geode.management.internal.cli.commands;
 
 import static org.apache.geode.cache.Region.SEPARATOR;
-import static org.apache.geode.internal.lang.SystemUtils.CURRENT_DIRECTORY;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
@@ -31,7 +30,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.IntStream;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Rule;
 import org.junit.Test;
@@ -59,9 +57,10 @@ import org.apache.geode.test.junit.assertions.CommandResultAssert;
 import org.apache.geode.test.junit.categories.PersistenceTest;
 import org.apache.geode.test.junit.rules.GfshCommandRule;
 import org.apache.geode.test.junit.rules.ServerStarterRule;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category(PersistenceTest.class)
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class DiskStoreCommandsDUnitTest implements Serializable {
   private static final String GROUP = "GROUP1";
   private static final String GROUP2 = "GROUP2";
@@ -515,7 +514,7 @@ public class DiskStoreCommandsDUnitTest implements Serializable {
         Paths.get(tempDir.getRoot().getAbsolutePath() + File.separator + "nonExistingDiskStore");
     assertThat(Files.exists(nonExistingDiskStorePath)).isFalse();
     gfsh.executeAndAssertThat(baseCommand + " --name=" + DISKSTORE + " --disk-dirs="
-        + nonExistingDiskStorePath.toAbsolutePath().toString()).statusIsError()
+        + nonExistingDiskStorePath.toAbsolutePath()).statusIsError()
         .containsOutput("Could not find disk-dirs:");
     assertThat(Files.exists(nonExistingDiskStorePath)).isFalse();
   }
@@ -534,7 +533,7 @@ public class DiskStoreCommandsDUnitTest implements Serializable {
             + DiskInitFile.IF_FILE_EXT);
     assertThat(Files.exists(diskStoreFilePath)).isFalse();
     gfsh.executeAndAssertThat(baseCommand + " --name=nonExistingDiskStore --disk-dirs="
-        + diskStorePath.toAbsolutePath().toString()).statusIsError()
+        + diskStorePath.toAbsolutePath()).statusIsError()
         .containsOutput("The init file " + diskStoreFilePath + " does not exist.");
     assertThat(Files.exists(diskStoreFilePath)).isFalse();
   }
@@ -583,8 +582,7 @@ public class DiskStoreCommandsDUnitTest implements Serializable {
     File[] diskDirs = diskStore.getDiskDirs();
     assertThat(diskDirs.length).isEqualTo(1);
     File diskDir = diskDirs[0];
-    String absoluteDiskDirectoryName = diskDirectoryName.startsWith(File.separator)
-        ? diskDirectoryName : CURRENT_DIRECTORY + File.separator + diskDirectoryName;
+    String absoluteDiskDirectoryName = Paths.get(diskDirectoryName).toAbsolutePath().toString();
     assertThat(diskDir.getAbsolutePath()).isEqualTo(absoluteDiskDirectoryName);
   }
 

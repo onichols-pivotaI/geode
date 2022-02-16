@@ -27,6 +27,7 @@ import org.apache.geode.internal.cache.BucketRegion;
 import org.apache.geode.internal.cache.RegionEntry;
 import org.apache.geode.internal.cache.RegionEntryContext;
 import org.apache.geode.internal.cache.versions.RegionVersionVector;
+import org.apache.geode.internal.lang.SystemProperty;
 import org.apache.geode.internal.lang.SystemPropertyHelper;
 import org.apache.geode.internal.logging.log4j.LogMarker;
 import org.apache.geode.logging.internal.executors.LoggingExecutors;
@@ -47,7 +48,7 @@ public class LRUListWithAsyncSorting extends AbstractEvictionList {
   private static final Logger logger = LogService.getLogger();
 
   @Immutable
-  private static final Optional<Integer> EVICTION_SCAN_MAX_THREADS = SystemPropertyHelper
+  private static final Optional<Integer> EVICTION_SCAN_MAX_THREADS = SystemProperty
       .getProductIntegerProperty(SystemPropertyHelper.EVICTION_SCAN_MAX_THREADS);
 
   @MakeNotStatic
@@ -81,13 +82,13 @@ public class LRUListWithAsyncSorting extends AbstractEvictionList {
   LRUListWithAsyncSorting(EvictionController controller, ExecutorService executor,
       int maxEvictionAttempts) {
     super(controller);
-    this.scanThreshold = calculateScanThreshold();
+    scanThreshold = calculateScanThreshold();
     this.executor = executor;
     this.maxEvictionAttempts = maxEvictionAttempts;
   }
 
   private double calculateScanThreshold() {
-    Optional<Integer> configuredThresholdPercent = SystemPropertyHelper
+    Optional<Integer> configuredThresholdPercent = SystemProperty
         .getProductIntegerProperty(SystemPropertyHelper.EVICTION_SCAN_THRESHOLD_PERCENT);
 
     int thresholdPercent =
@@ -203,7 +204,7 @@ public class LRUListWithAsyncSorting extends AbstractEvictionList {
 
   private boolean hasThresholdBeenMet(int recentlyUsedCount) {
     return size() >= maxEvictionAttempts
-        && (double) recentlyUsedCount / size() >= this.scanThreshold;
+        && (double) recentlyUsedCount / size() >= scanThreshold;
   }
 
   private synchronized EvictionNode moveToTailAndGetNext(EvictionNode evictionNode) {

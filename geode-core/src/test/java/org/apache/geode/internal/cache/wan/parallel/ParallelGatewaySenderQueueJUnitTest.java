@@ -14,6 +14,7 @@
  */
 package org.apache.geode.internal.cache.wan.parallel;
 
+import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.eq;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.when;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -40,18 +42,20 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
-import org.mockito.stubbing.Answer;
 
 import org.apache.geode.CancelCriterion;
 import org.apache.geode.cache.DataPolicy;
 import org.apache.geode.cache.PartitionAttributes;
 import org.apache.geode.cache.PartitionAttributesFactory;
 import org.apache.geode.cache.Region;
+import org.apache.geode.distributed.internal.DistributionConfig;
+import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.internal.cache.AbstractBucketRegionQueue;
 import org.apache.geode.internal.cache.BucketAdvisor;
 import org.apache.geode.internal.cache.BucketRegionQueue;
 import org.apache.geode.internal.cache.DistributedRegion;
 import org.apache.geode.internal.cache.GemFireCacheImpl;
+import org.apache.geode.internal.cache.InternalCacheForClientAccess;
 import org.apache.geode.internal.cache.InternalRegionFactory;
 import org.apache.geode.internal.cache.PartitionedRegion;
 import org.apache.geode.internal.cache.PartitionedRegionDataStore;
@@ -62,6 +66,7 @@ import org.apache.geode.internal.cache.wan.GatewaySenderEventImpl;
 import org.apache.geode.internal.cache.wan.GatewaySenderStats;
 import org.apache.geode.internal.cache.wan.parallel.ParallelGatewaySenderQueue.MetaRegionFactory;
 import org.apache.geode.internal.cache.wan.parallel.ParallelGatewaySenderQueue.ParallelGatewaySenderQueueMetaRegion;
+import org.apache.geode.management.internal.BaseManagementService;
 
 public class ParallelGatewaySenderQueueJUnitTest {
 
@@ -93,8 +98,6 @@ public class ParallelGatewaySenderQueueJUnitTest {
     String regionPath = "/testRegion";
     when(event.getRegionPath()).thenReturn(regionPath);
     Mockito.doThrow(new IllegalStateException()).when(event).release();
-    Queue backingList = new LinkedList();
-    backingList.add(event);
 
     queue = spy(queue);
     doReturn(true).when(queue).isDREvent(any(), any());
@@ -112,12 +115,12 @@ public class ParallelGatewaySenderQueueJUnitTest {
     PartitionedRegion region = mock(PartitionedRegion.class);
     when(region.getFullPath()).thenReturn(regionPath);
     when(cache.getRegion(regionPath, true)).thenReturn(region);
-    PartitionAttributes pa = mock(PartitionAttributes.class);
+    PartitionAttributes<?, ?> pa = mock(PartitionAttributes.class);
     when(region.getPartitionAttributes()).thenReturn(pa);
     when(pa.getColocatedWith()).thenReturn(null);
 
     Mockito.doThrow(new IllegalStateException()).when(event).release();
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event);
 
     BucketRegionQueue bucketRegionQueue = mockBucketRegionQueue(backingList);
@@ -157,14 +160,16 @@ public class ParallelGatewaySenderQueueJUnitTest {
     when(prQ.getBucketName(1)).thenReturn("_B__PARALLEL_GATEWAY_SENDER_QUEUE_1");
     when(prds.getLocalBucketById(1)).thenReturn(null);
     PartitionedRegion userPR = mock(PartitionedRegion.class);
-    PartitionAttributes pa = mock(PartitionAttributes.class);
+    PartitionAttributes<?, ?> pa = mock(PartitionAttributes.class);
     when(userPR.getPartitionAttributes()).thenReturn(pa);
     when(pa.getColocatedWith()).thenReturn(null);
     when(userPR.getDataPolicy()).thenReturn(DataPolicy.PERSISTENT_PARTITION);
     when(userPR.getFullPath()).thenReturn(regionPath);
-    when(cache.getRegion("_PARALLEL_GATEWAY_SENDER_QUEUE")).thenReturn(prQ);
+    when(cache.getRegion("_PARALLEL_GATEWAY_SENDER_QUEUE", true)).thenReturn(prQ);
     when(cache.getRegion(regionPath, true)).thenReturn(userPR);
     when(prQ.getColocatedWithRegion()).thenReturn(userPR);
+    when(prQ.isDestroyed()).thenReturn(false);
+
     RegionAdvisor ra = mock(RegionAdvisor.class);
     BucketAdvisor ba = mock(BucketAdvisor.class);
     when(userPR.getRegionAdvisor()).thenReturn(ra);
@@ -174,7 +179,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     prepareBrq(brq, isTmpQueue);
 
     Mockito.doThrow(new IllegalStateException()).when(event).release();
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event);
 
     BucketRegionQueue bucketRegionQueue = mockBucketRegionQueue(backingList);
@@ -221,7 +226,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     GatewaySenderEventImpl event = mock(GatewaySenderEventImpl.class);
     when(event.makeHeapCopyIfOffHeap()).thenReturn(event);
     Mockito.doThrow(new IllegalStateException()).when(event).release();
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event);
 
     BucketRegionQueue bucketRegionQueue = mockBucketRegionQueue(backingList);
@@ -230,7 +235,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
         Collections.emptySet(), 0, 1, metaRegionFactory);
     queue.setMockedAbstractBucketRegionQueue(bucketRegionQueue);
 
-    List peeked = queue.peek(1, 100);
+    List<?> peeked = queue.peek(1, 100);
     assertEquals(1, peeked.size());
     queue.remove();
   }
@@ -244,7 +249,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     when(event.makeHeapCopyIfOffHeap()).thenReturn(null);
     GatewaySenderEventImpl eventResolvesFromOffHeap = mock(GatewaySenderEventImpl.class);
     when(eventResolvesFromOffHeap.makeHeapCopyIfOffHeap()).thenReturn(eventResolvesFromOffHeap);
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event);
     backingList.add(eventResolvesFromOffHeap);
 
@@ -254,7 +259,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
         Collections.emptySet(), 0, 1, metaRegionFactory);
     queue.setMockedAbstractBucketRegionQueue(bucketRegionQueue);
 
-    List peeked = queue.peek(1, 100);
+    List<?> peeked = queue.peek(1, 100);
     assertEquals(1, peeked.size());
     verify(stats, times(1)).incEventsNotQueuedConflated();
   }
@@ -272,7 +277,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
 
     GatewaySenderEventImpl eventResolvesFromOffHeap = mock(GatewaySenderEventImpl.class);
     when(eventResolvesFromOffHeap.makeHeapCopyIfOffHeap()).thenReturn(eventResolvesFromOffHeap);
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(null);
     backingList.add(eventResolvesFromOffHeap);
 
@@ -282,13 +287,13 @@ public class ParallelGatewaySenderQueueJUnitTest {
         Collections.emptySet(), 0, 1, metaRegionFactory);
     queue.setMockedAbstractBucketRegionQueue(bucketRegionQueue);
 
-    List peeked = queue.peek(1, 100);
+    List<?> peeked = queue.peek(1, 100);
     assertEquals(1, peeked.size());
     verify(stats, times(1)).incEventsNotQueuedConflated();
   }
 
   @Test
-  public void testLocalSize() throws Exception {
+  public void testLocalSize() {
     ParallelGatewaySenderQueueMetaRegion mockMetaRegion =
         mock(ParallelGatewaySenderQueueMetaRegion.class);
     PartitionedRegionDataStore dataStore = mock(PartitionedRegionDataStore.class);
@@ -341,7 +346,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     GatewaySenderEventImpl event5 = createGatewaySenderEventImpl(3, false);
     GatewaySenderEventImpl event6 = createGatewaySenderEventImpl(3, true);
 
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event1);
     backingList.add(event2);
     backingList.add(event3);
@@ -356,9 +361,9 @@ public class ParallelGatewaySenderQueueJUnitTest {
     queue.setGroupTransactionEvents(true);
     queue.setMockedAbstractBucketRegionQueue(bucketRegionQueue);
 
-    List peeked = queue.peek(3, 100);
+    List<?> peeked = queue.peek(3, 100);
     assertEquals(4, peeked.size());
-    List peekedAfter = queue.peek(3, 100);
+    List<?> peekedAfter = queue.peek(3, 100);
     assertEquals(2, peekedAfter.size());
   }
 
@@ -373,7 +378,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     GatewaySenderEventImpl event5 = createGatewaySenderEventImpl(3, false);
     GatewaySenderEventImpl event6 = createGatewaySenderEventImpl(3, true);
 
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event1);
     backingList.add(event2);
     backingList.add(event3);
@@ -389,9 +394,9 @@ public class ParallelGatewaySenderQueueJUnitTest {
     queue.setGroupTransactionEvents(true);
     queue.setMockedAbstractBucketRegionQueue(bucketRegionQueue);
 
-    List peeked = queue.peek(-1, 1);
+    List<?> peeked = queue.peek(-1, 1);
     assertEquals(4, peeked.size());
-    List peekedAfter = queue.peek(-1, 100);
+    List<?> peekedAfter = queue.peek(-1, 100);
     assertEquals(2, peekedAfter.size());
   }
 
@@ -405,7 +410,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     GatewaySenderEventImpl event4 = createGatewaySenderEventImpl(1, true);
     GatewaySenderEventImpl event5 = createGatewaySenderEventImpl(2, true);
 
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event1);
     backingList.add(event2);
     backingList.add(event3);
@@ -418,9 +423,9 @@ public class ParallelGatewaySenderQueueJUnitTest {
         Collections.emptySet(), 0, 1, metaRegionFactory);
     queue.setMockedAbstractBucketRegionQueue(bucketRegionQueue);
 
-    List peeked = queue.peek(3, 100);
+    List<?> peeked = queue.peek(3, 100);
     assertEquals(3, peeked.size());
-    List peekedAfter = queue.peek(3, 100);
+    List<?> peekedAfter = queue.peek(3, 100);
     assertEquals(2, peekedAfter.size());
   }
 
@@ -435,7 +440,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     GatewaySenderEventImpl event5 = createGatewaySenderEventImpl(3, false);
     GatewaySenderEventImpl event6 = createGatewaySenderEventImpl(3, true);
 
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event1);
     backingList.add(event2);
     backingList.add(event3);
@@ -451,9 +456,9 @@ public class ParallelGatewaySenderQueueJUnitTest {
     queue.setGroupTransactionEvents(false);
     queue.setMockedAbstractBucketRegionQueue(bucketRegionQueue);
 
-    List peeked = queue.peek(-1, 1);
+    List<?> peeked = queue.peek(-1, 1);
     assertEquals(3, peeked.size());
-    List peekedAfter = queue.peek(-1, 100);
+    List<?> peekedAfter = queue.peek(-1, 100);
     assertEquals(3, peekedAfter.size());
   }
 
@@ -465,7 +470,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     GatewaySenderEventImpl event3 = createGatewaySenderEventImpl(1, true);
     GatewaySenderEventImpl event4 = createGatewaySenderEventImpl(2, true);
 
-    Queue backingList = new LinkedList();
+    Queue<GatewaySenderEventImpl> backingList = new LinkedList<>();
     backingList.add(event3);
     backingList.add(event4);
     BucketRegionQueue bucketRegionQueue = mockBucketRegionQueue(backingList);
@@ -501,6 +506,137 @@ public class ParallelGatewaySenderQueueJUnitTest {
     assertEquals(2L, ParallelGatewaySenderQueue.calculateTimeToSleep(40));
   }
 
+  @Test
+  public void testCleanQueueExecuteShadowPRWaitForBucketRecovery() {
+    PartitionedRegion region = mock(PartitionedRegion.class);
+    String regionPath = "/testRegion";
+    when(region.getFullPath()).thenReturn(regionPath);
+    PartitionAttributes<?, ?> pa = mock(PartitionAttributes.class);
+    when(region.getPartitionAttributes()).thenReturn(pa);
+    when(pa.getColocatedWith()).thenReturn(null);
+    long recoveryDelay = 0;
+
+    when(pa.getStartupRecoveryDelay()).thenReturn(recoveryDelay);
+    when(pa.getRecoveryDelay()).thenReturn(recoveryDelay);
+
+    when(region.getDataPolicy()).thenReturn(DataPolicy.PERSISTENT_PARTITION);
+
+    when(region.getTotalNumberOfBuckets()).thenReturn(11);
+    when(region.getRedundantCopies()).thenReturn(1);
+    when(region.getLocalSize()).thenReturn(1);
+    when(region.getLocalMaxMemory()).thenReturn(100);
+
+    when(sender.getDiskStoreName()).thenReturn("disk");
+    when(sender.isDiskSynchronous()).thenReturn(false);
+    when(sender.isPersistenceEnabled()).thenReturn(true);
+    when(sender.isBatchConflationEnabled()).thenReturn(true);
+
+    InternalRegionFactory regionFactory = mock(InternalRegionFactory.class);
+    when(cache.createInternalRegionFactory(any())).thenReturn(regionFactory);
+
+    when(cache.getRegion(any())).thenReturn(null);
+
+    InternalDistributedSystem mocksystem = mock(InternalDistributedSystem.class);
+
+    InternalCacheForClientAccess internalCache = mock(InternalCacheForClientAccess.class);
+    when(cache.getCacheForProcessingClientRequests()).thenReturn(internalCache);
+
+    when(internalCache.getInternalDistributedSystem()).thenReturn(mocksystem);
+    when(mocksystem.isConnected()).thenReturn(true);
+
+    DistributionConfig config = mock(DistributionConfig.class);
+    when(mocksystem.getConfig()).thenReturn(config);
+
+    when(config.getJmxManager()).thenReturn(false);
+
+    BaseManagementService managementService = mock(BaseManagementService.class);
+    BaseManagementService.setManagementService(internalCache, managementService);
+
+    Set<Region<?, ?>> targetRs = new HashSet<>();
+    targetRs.add(region);
+
+    PartitionedRegion shadowRegion = mock(PartitionedRegion.class);
+
+    when(regionFactory.create(any())).thenReturn(shadowRegion);
+
+    when(shadowRegion.getFullPath()).thenReturn("_PARALLEL_GATEWAY_SENDER_QUEUE");
+
+    mockGatewaySenderStats();
+
+    ParallelGatewaySenderQueue queue1 =
+        new ParallelGatewaySenderQueue(sender, targetRs, 0, 1, metaRegionFactory,
+            true);
+
+    verify(shadowRegion, times(1)).shadowPRWaitForBucketRecovery();
+
+  }
+
+  @Test
+  public void testCleanQueueExecuteShadowPRWaitForRegionDestroyingToFinish() {
+    PartitionedRegion region = mock(PartitionedRegion.class);
+    String regionPath = "/testRegion";
+    when(region.getFullPath()).thenReturn(regionPath);
+    PartitionAttributes<?, ?> pa = mock(PartitionAttributes.class);
+    when(region.getPartitionAttributes()).thenReturn(pa);
+    when(pa.getColocatedWith()).thenReturn(null);
+    long recoveryDelay = 0;
+
+    when(pa.getStartupRecoveryDelay()).thenReturn(recoveryDelay);
+    when(pa.getRecoveryDelay()).thenReturn(recoveryDelay);
+
+    when(region.getDataPolicy()).thenReturn(DataPolicy.PERSISTENT_PARTITION);
+
+    when(region.getTotalNumberOfBuckets()).thenReturn(11);
+    when(region.getRedundantCopies()).thenReturn(1);
+    when(region.getLocalSize()).thenReturn(1);
+    when(region.getLocalMaxMemory()).thenReturn(100);
+
+    when(sender.getDiskStoreName()).thenReturn("disk");
+    when(sender.isDiskSynchronous()).thenReturn(false);
+    when(sender.isPersistenceEnabled()).thenReturn(true);
+    when(sender.isBatchConflationEnabled()).thenReturn(true);
+
+    InternalRegionFactory regionFactory = mock(InternalRegionFactory.class);
+    when(cache.createInternalRegionFactory(any())).thenReturn(regionFactory);
+
+    PartitionedRegion prQ = mock(PartitionedRegion.class);
+
+    when(cache.getRegion("_PARALLEL_GATEWAY_SENDER_QUEUE", true)).thenReturn(prQ, prQ, null);
+    when(prQ.isDestroyed()).thenReturn(true);
+
+    InternalDistributedSystem mocksystem = mock(InternalDistributedSystem.class);
+
+    InternalCacheForClientAccess internalCache = mock(InternalCacheForClientAccess.class);
+    when(cache.getCacheForProcessingClientRequests()).thenReturn(internalCache);
+
+    when(internalCache.getInternalDistributedSystem()).thenReturn(mocksystem);
+    when(mocksystem.isConnected()).thenReturn(true);
+
+    DistributionConfig config = mock(DistributionConfig.class);
+    when(mocksystem.getConfig()).thenReturn(config);
+
+    when(config.getJmxManager()).thenReturn(false);
+
+    BaseManagementService managementService = mock(BaseManagementService.class);
+    BaseManagementService.setManagementService(internalCache, managementService);
+
+    Set<Region<?, ?>> targetRs = new HashSet<>();
+    targetRs.add(region);
+
+    PartitionedRegion shadowRegion = mock(PartitionedRegion.class);
+
+    when(regionFactory.create(any())).thenReturn(shadowRegion);
+
+    when(shadowRegion.getFullPath()).thenReturn("_PARALLEL_GATEWAY_SENDER_QUEUE");
+
+    mockGatewaySenderStats();
+
+    ParallelGatewaySenderQueue queue1 =
+        new ParallelGatewaySenderQueue(sender, targetRs, 0, 1, metaRegionFactory,
+            true);
+
+    verify(cache, times(3)).getRegion("_PARALLEL_GATEWAY_SENDER_QUEUE", true);
+  }
 
   private GatewaySenderEventImpl createGatewaySenderEventImpl(int transactionId,
       boolean isLastEventInTransaction) {
@@ -520,7 +656,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     return region;
   }
 
-  private BucketRegionQueue mockBucketRegionQueue(final Queue backingList) {
+  private BucketRegionQueue mockBucketRegionQueue(final Queue<GatewaySenderEventImpl> backingList) {
     PartitionedRegion mockBucketRegion = mockPR("bucketRegion");
     // These next mocked return calls are for when peek is called. It ends up checking these on the
     // mocked pr region
@@ -528,15 +664,13 @@ public class ParallelGatewaySenderQueueJUnitTest {
     when(mockBucketRegion.size()).thenReturn(backingList.size());
     BucketRegionQueue bucketRegionQueue = mock(BucketRegionQueue.class);
     when(bucketRegionQueue.getPartitionedRegion()).thenReturn(mockBucketRegion);
-    when(bucketRegionQueue.peek())
-        .thenAnswer((Answer) invocation -> pollAndWaitIfNull(backingList));
+    when(bucketRegionQueue.peek()).thenAnswer(invocation -> pollAndWaitIfNull(backingList));
     when(bucketRegionQueue.getElementsMatching(any(), any()))
-        .thenAnswer((Answer) invocation -> Arrays
-            .asList(new Object[] {getFirstNotNull(backingList)}));
+        .thenAnswer(invocation -> singletonList(getFirstNotNull(backingList)));
     return bucketRegionQueue;
   }
 
-  private Object pollAndWaitIfNull(Queue queue) {
+  private Object pollAndWaitIfNull(Queue<GatewaySenderEventImpl> queue) {
     Object object = queue.poll();
     if (object == null) {
       try {
@@ -548,7 +682,7 @@ public class ParallelGatewaySenderQueueJUnitTest {
     return object;
   }
 
-  private Object getFirstNotNull(Queue queue) {
+  private Object getFirstNotNull(Queue<GatewaySenderEventImpl> queue) {
     Object object = queue.poll();
     while (object == null) {
       object = queue.poll();
@@ -556,25 +690,20 @@ public class ParallelGatewaySenderQueueJUnitTest {
     return object;
   }
 
-  private class TestableParallelGatewaySenderQueue extends ParallelGatewaySenderQueue {
+  private static class TestableParallelGatewaySenderQueue extends ParallelGatewaySenderQueue {
 
     private BucketRegionQueue mockedAbstractBucketRegionQueue;
     private boolean groupTransactionEvents = false;
 
     public TestableParallelGatewaySenderQueue(final AbstractGatewaySender sender,
-        final Set<Region> userRegions, final int idx, final int nDispatcher) {
-      super(sender, userRegions, idx, nDispatcher, false);
-    }
-
-    public TestableParallelGatewaySenderQueue(final AbstractGatewaySender sender,
-        final Set<Region> userRegions, final int idx, final int nDispatcher,
+        final Set<Region<?, ?>> userRegions, final int idx, final int nDispatcher,
         final MetaRegionFactory metaRegionFactory) {
       super(sender, userRegions, idx, nDispatcher, metaRegionFactory, false);
     }
 
 
     public void setMockedAbstractBucketRegionQueue(BucketRegionQueue mocked) {
-      this.mockedAbstractBucketRegionQueue = mocked;
+      mockedAbstractBucketRegionQueue = mocked;
     }
 
     public void setGroupTransactionEvents(boolean groupTransactionEvents) {
@@ -584,11 +713,6 @@ public class ParallelGatewaySenderQueueJUnitTest {
     @Override
     public boolean mustGroupTransactionEvents() {
       return groupTransactionEvents;
-    }
-
-    public AbstractBucketRegionQueue getBucketRegion(final PartitionedRegion prQ,
-        final int bucketId) {
-      return mockedAbstractBucketRegionQueue;
     }
 
     @Override

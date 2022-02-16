@@ -16,8 +16,11 @@ package org.apache.geode.cache.client.internal;
 
 import java.io.IOException;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.DataSerializer;
 import org.apache.geode.SerializationException;
+import org.apache.geode.annotations.VisibleForTesting;
 import org.apache.geode.internal.InternalDataSerializer.SerializerAttributesHolder;
 import org.apache.geode.internal.cache.ClientServerObserver;
 import org.apache.geode.internal.cache.ClientServerObserverHolder;
@@ -44,15 +47,15 @@ public class RegisterDataSerializersOp {
     // no instances allowed
   }
 
-  private static class RegisterDataSerializersOpImpl extends AbstractOp {
+  @VisibleForTesting
+  public static class RegisterDataSerializersOpImpl extends AbstractOp {
 
     /**
      * @throws org.apache.geode.SerializationException if serialization fails
      */
     public RegisterDataSerializersOpImpl(DataSerializer[] dataSerializers, EventID eventId) {
       super(MessageType.REGISTER_DATASERIALIZERS, dataSerializers.length * 2 + 1);
-      for (int i = 0; i < dataSerializers.length; i++) {
-        DataSerializer dataSerializer = dataSerializers[i];
+      for (DataSerializer dataSerializer : dataSerializers) {
         // strip '.class' off these class names
         String className = dataSerializer.getClass().toString().substring(6);
         try {
@@ -75,13 +78,13 @@ public class RegisterDataSerializersOp {
      */
     public RegisterDataSerializersOpImpl(SerializerAttributesHolder[] holders, EventID eventId) {
       super(MessageType.REGISTER_DATASERIALIZERS, holders.length * 2 + 1);
-      for (int i = 0; i < holders.length; i++) {
+      for (final SerializerAttributesHolder holder : holders) {
         try {
-          getMessage().addBytesPart(BlobHelper.serializeToBlob(holders[i].getClassName()));
+          getMessage().addBytesPart(BlobHelper.serializeToBlob(holder.getClassName()));
         } catch (IOException ex) {
           throw new SerializationException("failed serializing object", ex);
         }
-        getMessage().addIntPart(holders[i].getId());
+        getMessage().addIntPart(holder.getId());
       }
       getMessage().addBytesPart(eventId.calcBytes());
       // // CALLBACK FOR TESTING PURPOSE ONLY ////
@@ -92,7 +95,7 @@ public class RegisterDataSerializersOp {
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       processAck(msg, "registerDataSerializers");
       return null;
     }

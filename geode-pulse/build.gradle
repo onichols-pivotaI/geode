@@ -117,6 +117,8 @@ dependencies {
 
   integrationTestImplementation(project(':geode-pulse'))
   integrationTestImplementation(project(':geode-pulse:geode-pulse-test'))
+  integrationTestImplementation(project(':geode-serialization'))
+
   integrationTestImplementation('org.springframework:spring-test')
   integrationTestImplementation('org.springframework:spring-webmvc')
   integrationTestImplementation('org.springframework.security:spring-security-test')

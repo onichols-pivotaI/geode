@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import junitparams.naming.TestCaseName;
 import org.junit.BeforeClass;
@@ -36,11 +35,12 @@ import org.apache.geode.management.internal.cli.result.CommandResult;
 import org.apache.geode.test.dunit.rules.ClusterStartupRule;
 import org.apache.geode.test.dunit.rules.MemberVM;
 import org.apache.geode.test.junit.rules.GfshCommandRule;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class ListMembersCommandDUnitTest {
   private static MemberVM locator1, locator2;
-  private Pattern pattern = Pattern.compile("(.*)locator-0(.*)\\[Coordinator]");
+  private final Pattern pattern = Pattern.compile("(.*)locator-0(.*)\\[Coordinator]");
 
   @Rule
   public GfshCommandRule gfsh = new GfshCommandRule(locator1::getJmxPort, jmxManager);

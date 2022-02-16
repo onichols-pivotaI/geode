@@ -30,7 +30,6 @@ import static org.mockito.Mockito.verify;
 import java.util.Properties;
 import java.util.function.Consumer;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import junitparams.naming.TestCaseName;
 import org.junit.After;
@@ -55,13 +54,14 @@ import org.apache.geode.internal.cache.InternalRegion;
 import org.apache.geode.internal.cache.LocalRegion;
 import org.apache.geode.internal.cache.TXManagerImpl;
 import org.apache.geode.internal.cache.TXStateProxy;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 /**
  * Tests transaction expiration functionality
  *
  * @since GemFire 4.0
  */
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class TXExpirationIntegrationTest {
 
   private static final String REGION_NAME =
@@ -243,13 +243,13 @@ public class TXExpirationIntegrationTest {
         r -> assertThat(r.get(KEY)).isNull()),
     REGION_IDLE_DESTROY(m -> m.setRegionIdleTimeout(new ExpirationAttributes(1, DESTROY)),
         s -> verify(s, atLeast(1)).afterRegionDestroyName(eq(REGION_NAME)),
-        r -> await().until(() -> r.isDestroyed())),
+        r -> await().until(r::isDestroyed)),
     REGION_IDLE_INVALIDATE(m -> m.setRegionIdleTimeout(new ExpirationAttributes(1, INVALIDATE)),
         s -> verify(s, atLeast(1)).afterRegionInvalidateName(eq(REGION_NAME)),
         r -> await().until(() -> r.get(KEY) == null)),
     REGION_TTL_DESTROY(m -> m.setRegionTimeToLive(new ExpirationAttributes(1, DESTROY)),
         s -> verify(s, atLeast(1)).afterRegionDestroyName(eq(REGION_NAME)),
-        r -> await().until(() -> r.isDestroyed())),
+        r -> await().until(r::isDestroyed)),
     REGION_TTL_INVALIDATE(m -> m.setRegionTimeToLive(new ExpirationAttributes(1, INVALIDATE)),
         s -> verify(s, atLeast(1)).afterRegionInvalidateName(eq(REGION_NAME)),
         r -> await().until(() -> r.get(KEY) == null));

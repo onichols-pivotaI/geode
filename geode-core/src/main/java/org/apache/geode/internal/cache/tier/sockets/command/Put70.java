@@ -17,6 +17,8 @@ package org.apache.geode.internal.cache.tier.sockets.command;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.InvalidDeltaException;
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.DynamicRegionFactory;
@@ -58,8 +60,9 @@ public class Put70 extends BaseCommand {
   private Put70() {}
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long p_start)
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long p_start)
       throws IOException, InterruptedException {
     long start = p_start;
     final CacheServerStats stats = serverConnection.getCacheServerStats();
@@ -212,8 +215,8 @@ public class Put70 extends BaseCommand {
     }
 
     final ByteBuffer eventIdPartsBuffer = ByteBuffer.wrap(eventPart.getSerializedForm());
-    final long threadId = EventID.readEventIdPartsFromOptmizedByteArray(eventIdPartsBuffer);
-    final long sequenceId = EventID.readEventIdPartsFromOptmizedByteArray(eventIdPartsBuffer);
+    final long threadId = EventID.readEventIdPartsFromOptimizedByteArray(eventIdPartsBuffer);
+    final long sequenceId = EventID.readEventIdPartsFromOptimizedByteArray(eventIdPartsBuffer);
 
     final EventIDHolder clientEvent = new EventIDHolder(
         new EventID(serverConnection.getEventMemberIDByteArray(), threadId, sequenceId));
@@ -379,7 +382,7 @@ public class Put70 extends BaseCommand {
               serverConnection.getProxyID(), true, clientEvent, true);
         } else {
           result = region.basicBridgePut(key, value, delta, isObject, callbackArg,
-              serverConnection.getProxyID(), true, clientEvent);
+              serverConnection.getProxyID(), clientEvent, true);
         }
         if (clientMessage.isRetry() && clientEvent.isConcurrencyConflict()
             && clientEvent.getVersionTag() != null) {

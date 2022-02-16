@@ -98,15 +98,6 @@ public class DeployJarAcceptanceTest {
   }
 
   @Test
-  public void testDeployJarWithDeploymentName() throws IOException {
-    GfshScript.of(getLocatorGFSHConnectionString(),
-        "deploy --name=myDeployment --jar=" + jarFile.getCanonicalPath()).execute(gfshRule);
-
-    assertThat(GfshScript.of(getLocatorGFSHConnectionString(), "list deployed")
-        .execute(gfshRule).getOutputText()).contains("myDeployment").contains("JAR Location");
-  }
-
-  @Test
   public void testUndeployJar() throws IOException {
     GfshScript.of(getLocatorGFSHConnectionString(),
         "deploy --jar=" + jarFile.getCanonicalPath()).execute(gfshRule);
@@ -269,7 +260,7 @@ public class DeployJarAcceptanceTest {
 
   private File loadTestResource(String fileName) {
     String filePath =
-        createTempFileFromResource(this.getClass(), fileName).getAbsolutePath();
+        createTempFileFromResource(getClass(), fileName).getAbsolutePath();
     assertThat(filePath).isNotNull();
 
     return new File(filePath);

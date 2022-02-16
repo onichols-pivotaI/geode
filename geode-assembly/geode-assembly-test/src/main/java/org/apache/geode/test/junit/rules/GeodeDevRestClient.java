@@ -52,11 +52,11 @@ import org.apache.http.impl.client.HttpClients;
 public class GeodeDevRestClient {
   public static final String CONTEXT = "/geode/v1";
 
-  private String context;
-  private String bindAddress;
-  private int restPort;
-  private boolean useSsl;
-  private HttpHost host;
+  private final String context;
+  private final String bindAddress;
+  private final int restPort;
+  private final boolean useSsl;
+  private final HttpHost host;
 
 
   public GeodeDevRestClient(String bindAddress, int restPort) {
@@ -156,7 +156,10 @@ public class GeodeDevRestClient {
 
       return clientBuilder.build().execute(host, request, clientContext);
     } catch (Exception e) {
-      throw new RuntimeException(e.getMessage(), e);
+      throw new RuntimeException(
+          String.format("Request %s' with username '%s' password '%s' failed", request, username,
+              password),
+          e);
     }
   }
 

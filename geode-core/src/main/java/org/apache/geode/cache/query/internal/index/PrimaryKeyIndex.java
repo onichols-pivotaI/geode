@@ -14,6 +14,8 @@
  */
 package org.apache.geode.cache.query.internal.index;
 
+import static org.apache.geode.cache.query.internal.CompiledValue.indexThresholdSize;
+
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -62,7 +64,7 @@ public class PrimaryKeyIndex extends AbstractIndex {
     if (constr == null) {
       constr = Object.class;
     }
-    this.indexResultType = new ObjectTypeImpl(constr);
+    indexResultType = new ObjectTypeImpl(constr);
     markValid(true);
   }
 
@@ -78,7 +80,7 @@ public class PrimaryKeyIndex extends AbstractIndex {
 
   @Override
   public ObjectType getResultSetType() {
-    return this.indexResultType;
+    return indexResultType;
   }
 
   @Override
@@ -105,6 +107,9 @@ public class PrimaryKeyIndex extends AbstractIndex {
     Boolean applyLimit = (Boolean) context.cacheGet(CompiledValue.CAN_APPLY_LIMIT_AT_INDEX);
     if (applyLimit != null && applyLimit) {
       limit = (Integer) context.cacheGet(CompiledValue.RESULT_LIMIT);
+      if (limit != -1 && limit < indexThresholdSize) {
+        limit = indexThresholdSize;
+      }
     }
     QueryObserver observer = QueryObserverHolder.getInstance();
     if (limit != -1 && results.size() == limit) {
@@ -133,11 +138,10 @@ public class PrimaryKeyIndex extends AbstractIndex {
           ++limit;
         }
         // results.addAll(values);
-        Iterator iter = values.iterator();
-        while (iter.hasNext()) {
+        for (final Object value : values) {
           // Check if query execution on this thread is canceled.
           QueryMonitor.throwExceptionIfQueryOnCurrentThreadIsCanceled();
-          addResultToResults(context, results, key, iter.next());
+          addResultToResults(context, results, key, value);
           if (limit != -1 && results.size() == limit) {
             observer.limitAppliedAtIndexLevel(this, limit, results);
             return;
@@ -182,8 +186,11 @@ public class PrimaryKeyIndex extends AbstractIndex {
 
     Boolean applyLimit = (Boolean) context.cacheGet(CompiledValue.CAN_APPLY_LIMIT_AT_INDEX);
 
-    if (applyLimit != null && applyLimit.booleanValue()) {
-      limit = ((Integer) context.cacheGet(CompiledValue.RESULT_LIMIT)).intValue();
+    if (applyLimit != null && applyLimit) {
+      limit = (Integer) context.cacheGet(CompiledValue.RESULT_LIMIT);
+      if (limit != -1 && limit < indexThresholdSize) {
+        limit = indexThresholdSize;
+      }
     }
     if (limit != -1 && results.size() == limit) {
       observer.limitAppliedAtIndexLevel(this, limit, results);
@@ -217,10 +224,9 @@ public class PrimaryKeyIndex extends AbstractIndex {
 
       case OQLLexerTokenTypes.TOK_NE_ALT:
       case OQLLexerTokenTypes.TOK_NE: { // add all btree values
-        Set entries = (Set) getRegion().entrySet();
-        Iterator itr = entries.iterator();
-        while (itr.hasNext()) {
-          Map.Entry entry = (Map.Entry) itr.next();
+        Set entries = getRegion().entrySet();
+        for (final Object o : entries) {
+          Map.Entry entry = (Map.Entry) o;
 
           if (key != null && key != QueryService.UNDEFINED && key.equals(entry.getKey())) {
             continue;
@@ -315,13 +321,11 @@ public class PrimaryKeyIndex extends AbstractIndex {
 
     @Override
     public String toString() {
-      StringBuffer sb = new StringBuffer();
-      sb.append("No Keys = ").append(getNumberOfKeys()).append("\n");
-      sb.append("No Values = ").append(getNumberOfValues()).append("\n");
-      sb.append("No Uses = ").append(getTotalUses()).append("\n");
-      sb.append("No Updates = ").append(getNumUpdates()).append("\n");
-      sb.append("Total Update time = ").append(getTotalUpdateTime()).append("\n");
-      return sb.toString();
+      return "No Keys = " + getNumberOfKeys() + "\n"
+          + "No Values = " + getNumberOfValues() + "\n"
+          + "No Uses = " + getTotalUses() + "\n"
+          + "No Updates = " + getNumUpdates() + "\n"
+          + "Total Update time = " + getTotalUpdateTime() + "\n";
     }
   }
 
@@ -351,6 +355,6 @@ public class PrimaryKeyIndex extends AbstractIndex {
 
   @Override
   public boolean isEmpty() {
-    return createStats("primaryKeyIndex").getNumberOfKeys() == 0 ? true : false;
+    return createStats("primaryKeyIndex").getNumberOfKeys() == 0;
   }
 }

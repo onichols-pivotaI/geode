@@ -15,8 +15,6 @@
 package org.apache.geode.cache.lucene;
 
 
-
-import junitparams.JUnitParamsRunner;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.experimental.categories.Category;
@@ -27,37 +25,38 @@ import org.apache.geode.test.dunit.rules.MemberVM;
 import org.apache.geode.test.junit.categories.LuceneTest;
 import org.apache.geode.test.junit.categories.SecurityTest;
 import org.apache.geode.test.junit.rules.GfshCommandRule;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category({SecurityTest.class, LuceneTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class LuceneCommandsSecurityWithRegionCreatedBeforeIndexDUnitTest
     extends LuceneCommandsSecurityDUnitTest {
 
   @Before
   public void setLuceneReindexFlag() {
-    MemberVM server = this.locatorServer.getMember(1);
+    MemberVM server = locatorServer.getMember(1);
     server.invoke(() -> LuceneServiceImpl.LUCENE_REINDEX = true);
   }
 
   @After
   public void clearLuceneReindexFlag() {
-    MemberVM server = this.locatorServer.getMember(1);
+    MemberVM server = locatorServer.getMember(1);
     server.invoke(() -> LuceneServiceImpl.LUCENE_REINDEX = false);
   }
 
   @Override
   protected void createIndexAndRegion() throws Exception {
     // Connect gfsh to locator with permissions necessary to create an index and region
-    this.gfshShell.secureConnectAndVerify(this.locator.getPort(), GfshCommandRule.PortType.locator,
+    gfshShell.secureConnectAndVerify(locator.getPort(), GfshCommandRule.PortType.locator,
         "cluster,data", "cluster,data");
 
     // Create region
-    this.gfshShell.executeAndAssertThat(getCreateRegionCommand()).statusIsSuccess();
+    gfshShell.executeAndAssertThat(getCreateRegionCommand()).statusIsSuccess();
 
     // Create lucene index
-    this.gfshShell.executeAndAssertThat(getCreateIndexCommand()).statusIsSuccess();
+    gfshShell.executeAndAssertThat(getCreateIndexCommand()).statusIsSuccess();
 
     // Disconnect gfsh
-    this.gfshShell.disconnect();
+    gfshShell.disconnect();
   }
 }

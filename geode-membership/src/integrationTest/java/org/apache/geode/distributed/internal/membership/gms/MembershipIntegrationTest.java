@@ -78,6 +78,7 @@ public class MembershipIntegrationTest {
   public void before() throws IOException, MembershipConfigurationException {
     localHost = LocalHostUtil.getLocalHost();
     dsfidSerializer = new DSFIDSerializerImpl();
+    Services.registerSerializables(dsfidSerializer);
     socketCreator = new TcpSocketCreatorImpl();
   }
 
@@ -297,7 +298,7 @@ public class MembershipIntegrationTest {
         new TcpClient(socketCreator, dsfidSerializer.getObjectSerializer(),
             dsfidSerializer.getObjectDeserializer(), TcpSocketFactory.DEFAULT);
 
-    return MembershipBuilder.<MemberIdentifier>newMembershipBuilder(
+    return MembershipBuilder.newMembershipBuilder(
         socketCreator, locatorClient, dsfidSerializer, memberIdFactory)
         .setMembershipLocator(embeddedLocator)
         .setConfig(config)
@@ -348,7 +349,7 @@ public class MembershipIntegrationTest {
     final MembershipConfig config =
         createMembershipConfig(true, DEFAULT_LOCATOR_WAIT_TIME, locatorPorts);
 
-    return MembershipLocatorBuilder.<MemberIdentifier>newLocatorBuilder(
+    return MembershipLocatorBuilder.newLocatorBuilder(
         socketCreator,
         dsfidSerializer,
         locatorDirectory,
@@ -363,6 +364,6 @@ public class MembershipIntegrationTest {
   }
 
   private void stop(final MembershipLocator<MemberIdentifier>... locators) {
-    Arrays.stream(locators).forEach(locator -> locator.stop());
+    Arrays.stream(locators).forEach(MembershipLocator::stop);
   }
 }

@@ -36,7 +36,9 @@ public class SerializableRegionRedundancyStatusImpl extends
   /**
    * Default constructor used for serialization
    */
-  public SerializableRegionRedundancyStatusImpl() {}
+  public SerializableRegionRedundancyStatusImpl() {
+    status = RedundancyStatus.NOT_SATISFIED;
+  }
 
   public SerializableRegionRedundancyStatusImpl(PartitionedRegion region) {
     regionName = region.getName();
@@ -51,7 +53,7 @@ public class SerializableRegionRedundancyStatusImpl extends
    * @param region The region for which the lowest redundancy should be calculated.
    * @return The redundancy of the least redundant bucket in the region.
    */
-  private int calculateLowestRedundancy(PartitionedRegion region) {
+  int calculateLowestRedundancy(PartitionedRegion region) {
     int numBuckets = region.getPartitionAttributes().getTotalNumBuckets();
     int minRedundancy = Integer.MAX_VALUE;
     for (int i = 0; i < numBuckets; i++) {
@@ -62,7 +64,7 @@ public class SerializableRegionRedundancyStatusImpl extends
         minRedundancy = bucketRedundancy;
       }
     }
-    return minRedundancy;
+    return minRedundancy == Integer.MAX_VALUE ? 0 : minRedundancy;
   }
 
   /**
@@ -104,10 +106,10 @@ public class SerializableRegionRedundancyStatusImpl extends
   @Override
   public void fromData(DataInput in, DeserializationContext context)
       throws IOException, ClassNotFoundException {
-    this.regionName = DataSerializer.readString(in);
-    this.status = DataSerializer.readEnum(RedundancyStatus.class, in);
-    this.configuredRedundancy = in.readInt();
-    this.actualRedundancy = in.readInt();
+    regionName = DataSerializer.readString(in);
+    status = DataSerializer.readEnum(RedundancyStatus.class, in);
+    configuredRedundancy = in.readInt();
+    actualRedundancy = in.readInt();
   }
 
   @Override

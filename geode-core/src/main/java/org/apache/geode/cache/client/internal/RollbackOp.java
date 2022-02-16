@@ -14,6 +14,8 @@
  */
 package org.apache.geode.cache.client.internal;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.internal.cache.tier.MessageType;
 import org.apache.geode.internal.cache.tier.sockets.Message;
 
@@ -40,7 +42,7 @@ public class RollbackOp {
   }
 
   private static class RollbackOpImpl extends AbstractOp {
-    private int txId;
+    private final int txId;
 
     protected RollbackOpImpl(int txId) {
       super(MessageType.ROLLBACK, 1);
@@ -50,11 +52,11 @@ public class RollbackOp {
 
     @Override
     public String toString() {
-      return "Rollback(txId=" + this.txId + ")";
+      return "Rollback(txId=" + txId + ")";
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       processAck(msg, "rollback");
       return null;
     }

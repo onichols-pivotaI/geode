@@ -57,6 +57,17 @@ Create async-event-queues, disk-stores, gateway receivers, gateway senders, inde
 
     Create a region with given path and configuration.
 
+
+**Note:** The order in which components are created matters. For example, the recommendation for WAN setup is:
+
+- Create/start WAN senders first
+- Create Regions
+- Create/start WAN receivers last
+
+This assures that when WAN receivers are started, their associated regions are in place. Otherwise,
+the `create region` command may fail if events are received before the region exists.
+For more on this topic, see [Configuring a Multi-site (WAN) System](../../../topologies_and_comm/multi_site_configuration/setting_up_a_multisite_system.html).
+
 ## <a id="topic_ryz_pb1_dk" class="no-quick-link"></a>create async-event-queue
 
 Creates an asynchronous event queue for batching events before they are delivered by a gateway sender.
@@ -286,7 +297,7 @@ create disk-store --name=value --dir=value(,value)* [--allow-force-compaction(=v
 <pre class="pre codeblock"><code>--dir=/data/ds1 
 --dir=/data/ds2#5000</code></pre>
 If the specified directory does not exist, the command will create the directory for you.</td>
-<td> </td>
+<td>If the maximum directory size in megabytes is not specified, it will be set to `2147483647` (the value of `Integer.MAX_VALUE`)</td>
 </tr>
 <tr>
 <td><span class="keyword parmname">\-\-allow-force-compaction</span></td>
@@ -325,7 +336,7 @@ If the specified directory does not exist, the command will create the directory
 </tr>
 <tr>
 <td><span class="keyword parmname">\-\-write-buffer-size</span></td>
-<td>The size of the write buffer that this disk store uses when writing data to disk. Larger values may increase performance but use more memory. The disk store allocates one direct memory buffer of this size.</td>
+<td>The size in bytes of the write buffer that this disk store uses when writing data to disk. Larger values may increase performance but use more memory. The disk store allocates one direct memory buffer of this size.</td>
 <td>32768</td>
 </tr>
 <tr>
@@ -367,7 +378,6 @@ unless the `--groups` or `--members` option is specified.
 
 If the gateway receiver creation succeeds on at least one member,
 this `gfsh` command exits with an exit code indicating success.
-
 
 Outputs a tabular format status of each member's gateway receiver,
 independent of the success or failure of the creation.
@@ -585,7 +595,7 @@ create gateway-sender --id=value --remote-distributed-system-id=value
 </tr>
 <tr>
 <td><span class="keyword parmname">\-\-disk-store-name</span></td>
-<td>Named disk store to use for storing the queue overflow, or for persisting the queue. If you specify a value, the named disk store must exist. If you specify a null value, <%=vars.product_name%> uses the default disk store for overflow and queue persistence. For parallel gateway senders, set this to the same disk store the region uses.</td>
+<td>Named disk store to use for storing the queue overflow, or for persisting the queue. If you specify a value, the named disk store must exist. If you specify a null value, <%=vars.product_name%> uses the default disk store for overflow and queue persistence.</td>
 <td> </td>
 </tr>
 <tr>

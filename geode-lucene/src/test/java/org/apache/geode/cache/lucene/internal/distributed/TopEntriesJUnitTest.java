@@ -21,16 +21,15 @@ import org.junit.experimental.categories.Category;
 
 import org.apache.geode.CopyHelper;
 import org.apache.geode.cache.lucene.LuceneQueryFactory;
-import org.apache.geode.cache.lucene.internal.LuceneServiceImpl;
 import org.apache.geode.cache.lucene.test.LuceneTestUtilities;
 import org.apache.geode.test.junit.categories.LuceneTest;
 
 @Category(LuceneTest.class)
 public class TopEntriesJUnitTest {
-  private EntryScore<String> r1_1 = new EntryScore<>("3", .9f);
-  private EntryScore<String> r1_2 = new EntryScore<>("1", .8f);
-  private EntryScore<String> r2_1 = new EntryScore<>("2", 0.85f);
-  private EntryScore<String> r2_2 = new EntryScore<>("4", 0.1f);
+  private final EntryScore<String> r1_1 = new EntryScore<>("3", .9f);
+  private final EntryScore<String> r1_2 = new EntryScore<>("1", .8f);
+  private final EntryScore<String> r2_1 = new EntryScore<>("2", 0.85f);
+  private final EntryScore<String> r2_2 = new EntryScore<>("4", 0.1f);
 
   @Test
   @SuppressWarnings("unchecked")
@@ -69,7 +68,7 @@ public class TopEntriesJUnitTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void testInvalidLimit() {
-    new TopEntries<String>(-1);
+    new TopEntries<>(-1);
   }
 
   @Test
@@ -88,7 +87,6 @@ public class TopEntriesJUnitTest {
   @Test
   @SuppressWarnings("unchecked")
   public void testSerialization() {
-    LuceneServiceImpl.registerDataSerializables();
     TopEntries<String> hits = new TopEntries<>(3);
 
     TopEntries<String> copy = CopyHelper.deepCopy(hits);

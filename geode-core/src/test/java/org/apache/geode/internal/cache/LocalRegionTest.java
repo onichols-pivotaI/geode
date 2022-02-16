@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -46,6 +47,7 @@ import org.apache.geode.cache.EvictionAction;
 import org.apache.geode.cache.EvictionAttributes;
 import org.apache.geode.cache.ExpirationAttributes;
 import org.apache.geode.cache.MembershipAttributes;
+import org.apache.geode.cache.Operation;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionAttributes;
 import org.apache.geode.cache.client.internal.ServerRegionProxy;
@@ -59,6 +61,7 @@ import org.apache.geode.internal.cache.LocalRegion.ServerRegionProxyConstructor;
 import org.apache.geode.internal.cache.control.InternalResourceManager;
 import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
 import org.apache.geode.internal.cache.tier.sockets.VersionedObjectList;
+import org.apache.geode.internal.cache.versions.ConcurrentCacheModificationException;
 import org.apache.geode.internal.cache.versions.VersionTag;
 import org.apache.geode.internal.util.concurrent.FutureResult;
 import org.apache.geode.pdx.PdxInstance;
@@ -293,23 +296,48 @@ public class LocalRegionTest {
   }
 
   @Test
-  public void cancelAllEntryExpiryTasksShouldClearMapOfExpiryTasks() {
-    when(cache.getExpirationScheduler()).thenReturn(mock(ExpirationScheduler.class));
+  public void verifyBasicBridgePutSetsVersionTagOnClientEventIfConcurrencyConflictAndPossibleDuplicate() {
+    // Create the region
+
     LocalRegion region =
         spy(new LocalRegion("region", regionAttributes, null, cache, internalRegionArguments,
             internalDataView, regionMapConstructor, serverRegionProxyConstructor, entryEventFactory,
             poolFinder, regionPerfStatsFactory, disabledClock()));
 
-    RegionEntry regionEntry1 = mock(RegionEntry.class);
-    RegionEntry regionEntry2 = mock(RegionEntry.class);
-    EntryExpiryTask entryExpiryTask1 = spy(new EntryExpiryTask(region, regionEntry1));
-    EntryExpiryTask entryExpiryTask2 = spy(new EntryExpiryTask(region, regionEntry2));
-    region.entryExpiryTasks.put(regionEntry1, entryExpiryTask1);
-    region.entryExpiryTasks.put(regionEntry2, entryExpiryTask2);
+    // Create the client event
+    EventIDHolder clientEvent = new EventIDHolder(new EventID(new byte[] {1}, 1, 1));
+    clientEvent.setPossibleDuplicate(true);
 
-    region.cancelAllEntryExpiryTasks();
-    assertThat(region.entryExpiryTasks).isEmpty();
-    verify(entryExpiryTask1, times(1)).cancel();
-    verify(entryExpiryTask2, times(1)).cancel();
+    // Make assertions of the initial client event
+    assertThat(clientEvent.isPossibleDuplicate()).isTrue();
+    assertThat(clientEvent.isConcurrencyConflict()).isFalse();
+    assertThat(clientEvent.getVersionTag()).isNull();
+
+    // Create the mock EntryEventImpl
+    EntryEventImpl event = mock(EntryEventImpl.class);
+    when(event.isConcurrencyConflict()).thenReturn(true);
+    doNothing().when(event).isConcurrencyConflict(true);
+    VersionTag<?> tag = mock(VersionTag.class);
+    when(event.getVersionTag()).thenReturn(tag);
+    when(entryEventFactory.create(eq(region), eq(Operation.UPDATE), eq(0), eq(null), eq(null),
+        eq(false), any(), eq(true), eq(clientEvent.getEventId()))).thenReturn(event);
+
+    // Cause a ConcurrentModificationException to be thrown when basicUpdate is called
+    when(region.basicUpdate(event, false, false, 0L, false))
+        .thenThrow(ConcurrentCacheModificationException.class);
+
+    // Invoke basicBridgePut
+    boolean result = region.basicBridgePut(0, new byte[1], null, true,
+        null, mock(ClientProxyMembershipID.class), clientEvent, true);
+
+    // Make assertions of basicBridgePut
+    assertThat(result).isFalse();
+    verify(event).isConcurrencyConflict(true);
+
+    // Make assertions of the output clientEvent
+    assertThat(clientEvent.isPossibleDuplicate()).isTrue();
+    assertThat(clientEvent.isConcurrencyConflict()).isTrue();
+    assertThat(clientEvent.getVersionTag()).isEqualTo(tag);
+
   }
 }

@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.internal.ExecuteFunctionHelper;
@@ -66,8 +68,9 @@ public class ExecuteRegionFunction66 extends BaseCommand {
   ExecuteRegionFunction66() {}
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start) throws IOException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start) throws IOException {
     String regionName = null;
     Object function = null;
     Object args = null;
@@ -83,8 +86,7 @@ public class ExecuteRegionFunction66 extends BaseCommand {
     try {
       byte[] bytes = clientMessage.getPart(0).getSerializedForm();
       functionState = bytes[0];
-      if (bytes.length >= 5
-          && serverConnection.getClientVersion().ordinal() >= KnownVersion.GFE_8009.ordinal()) {
+      if (bytes.length >= 5) {
         functionTimeout = Part.decodeInt(bytes, 1);
       }
       if (functionState != 1) {
@@ -253,7 +255,7 @@ public class ExecuteRegionFunction66 extends BaseCommand {
       // 4> in case of HA member departed
       if (logger.isDebugEnabled()) {
         logger.debug(String.format("Exception on server while executing function: %s",
-            new Object[] {function}),
+            function),
             fe);
       }
     } else if (functionObject.isHA()) {
@@ -338,7 +340,7 @@ public class ExecuteRegionFunction66 extends BaseCommand {
       throws IOException, ClassNotFoundException {
     Set<Object> removedNodesSet = null;
     if (removedNodesSize != 0) {
-      removedNodesSet = new HashSet<Object>();
+      removedNodesSet = new HashSet<>();
       partNumber = partNumber + 1;
 
       for (int i = 0; i < removedNodesSize; i++) {
@@ -353,7 +355,7 @@ public class ExecuteRegionFunction66 extends BaseCommand {
     Set<Object> filter = null;
     int partNumber;
     if (filterSize != 0) {
-      filter = new HashSet<Object>();
+      filter = new HashSet<>();
       partNumber = 7;
       for (int i = 0; i < filterSize; i++) {
         filter.add(clientMessage.getPart(partNumber + i).getStringOrObject());

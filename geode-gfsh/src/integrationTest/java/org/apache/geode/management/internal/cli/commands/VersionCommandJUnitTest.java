@@ -14,6 +14,7 @@
  */
 package org.apache.geode.management.internal.cli.commands;
 
+import static org.apache.geode.internal.SystemDescription.RUNNING_ON;
 import static org.apache.geode.internal.VersionDescription.BUILD_ID;
 import static org.apache.geode.internal.VersionDescription.BUILD_JAVA_VERSION;
 import static org.apache.geode.internal.VersionDescription.BUILD_PLATFORM;
@@ -24,7 +25,6 @@ import static org.apache.geode.internal.VersionDescription.SOURCE_REPOSITORY;
 import static org.apache.geode.internal.VersionDescription.SOURCE_REVISION;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -36,13 +36,14 @@ import org.apache.geode.internal.GemFireVersion;
 import org.apache.geode.test.junit.categories.GfshTest;
 import org.apache.geode.test.junit.rules.GfshCommandRule;
 import org.apache.geode.test.junit.rules.LocatorStarterRule;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category({GfshTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class VersionCommandJUnitTest {
   private static final String[] EXPECTED_FULL_DATA =
       {BUILD_ID, BUILD_JAVA_VERSION, BUILD_PLATFORM, PRODUCT_NAME, PRODUCT_VERSION,
-          SOURCE_DATE, SOURCE_REPOSITORY, SOURCE_REVISION, "Running on"};
+          SOURCE_DATE, SOURCE_REPOSITORY, SOURCE_REVISION, RUNNING_ON};
 
   @ClassRule
   public static LocatorStarterRule locator = new LocatorStarterRule().withAutoStart();

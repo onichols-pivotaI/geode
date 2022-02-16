@@ -115,8 +115,8 @@ public class DistributionImpl implements Distribution {
       final MessageListener<InternalDistributedMember> messageListener,
       final MembershipLocator<InternalDistributedMember> locator) {
     this.clusterDistributionManager = clusterDistributionManager;
-    this.transportConfig = transport;
-    this.tcpDisabled = transportConfig.isTcpDisabled();
+    transportConfig = transport;
+    tcpDisabled = transportConfig.isTcpDisabled();
     // cache these settings for use in send()
     mcastEnabled = transportConfig.isMcastEnabled();
     ackSevereAlertThreshold = system.getConfig().getAckSevereAlertThreshold();
@@ -196,8 +196,8 @@ public class DistributionImpl implements Distribution {
       final RemoteTransportConfig transport, final InternalDistributedSystem system,
       Membership<InternalDistributedMember> membership) {
     this.clusterDistributionManager = clusterDistributionManager;
-    this.transportConfig = transport;
-    this.tcpDisabled = transportConfig.isTcpDisabled();
+    transportConfig = transport;
+    tcpDisabled = transportConfig.isTcpDisabled();
     // cache these settings for use in send()
     mcastEnabled = transportConfig.isMcastEnabled();
     ackSevereAlertThreshold = system.getConfig().getAckSevereAlertThreshold();
@@ -387,15 +387,19 @@ public class DistributionImpl implements Distribution {
         Throwable th = it_causes.next();
 
         if (!membership.hasMember(member) || (th instanceof ShunnedMemberException)) {
+          if (logger.isDebugEnabled()) {
+            logger
+                .debug(String.format("Failed to send message <%s> to member <%s> no longer in view",
+                    content.getShortClassName(), member), th);
+          }
           continue;
         }
         logger
             .fatal(String.format("Failed to send message <%s> to member <%s> view, %s",
                 // TODO - This used to be services.getJoinLeave().getView(), which is a different
                 // view object. Is it ok to log membershipManager.getView here?
-                new Object[] {content, member, membership.getView()}),
+                content, member, membership.getView()),
                 th);
-        // Assert.assertTrue(false, "messaging contract failure");
       }
       return new HashSet<>(members);
     } // catch ConnectionExceptions
@@ -617,7 +621,7 @@ public class DistributionImpl implements Distribution {
   // TODO - this method is only used by tests
   @VisibleForTesting
   void setDirectChannel(DirectChannel dc) {
-    this.directChannel = dc;
+    directChannel = dc;
   }
 
   private void startDirectChannel(final MemberIdentifier memberID) {
@@ -652,7 +656,7 @@ public class DistributionImpl implements Distribution {
       // fix for bug 34010
       new LoggingThread("disconnect thread for " + member, () -> {
         try {
-          Thread.sleep(Integer.getInteger("p2p.disconnectDelay", 3000).intValue());
+          Thread.sleep(Integer.getInteger("p2p.disconnectDelay", 3000));
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
           // Keep going, try to close the endpoint.
@@ -780,7 +784,7 @@ public class DistributionImpl implements Distribution {
     OverflowQueueWithDMStats<Runnable> serialQueue =
         clusterDistributionManager.getExecutors().getSerialQueue(idm);
     if (serialQueue != null) {
-      final boolean done[] = new boolean[1];
+      final boolean[] done = new boolean[1];
       final FlushingMessage msg = new FlushingMessage(done);
       serialQueue.add(new SizeableRunnable(100) {
         @Override
@@ -886,7 +890,7 @@ public class DistributionImpl implements Distribution {
 
   private static class LifecycleListenerImpl
       implements LifecycleListener<InternalDistributedMember> {
-    private DistributionImpl distribution;
+    private final DistributionImpl distribution;
 
     LifecycleListenerImpl(final DistributionImpl distribution) {
       this.distribution = distribution;
@@ -921,13 +925,20 @@ public class DistributionImpl implements Distribution {
     }
 
     @Override
-    public void forcedDisconnect() {
-      // stop server locators immediately since they may not have correct
-      // information. This has caused client failures in bridge/wan
-      // network-down testing
-      InternalLocator loc = (InternalLocator) Locator.getLocator();
-      if (loc != null) {
-        loc.stop(true, !distribution.disableAutoReconnect, true);
+    public void forcedDisconnect(String reason, RECONNECTING isReconnect) {
+      if (isReconnect == RECONNECTING.NOT_RECONNECTING) {
+        // stop server locators immediately since they may not have correct
+        // information. This has caused client failures in bridge/wan
+        // network-down testing
+        InternalLocator loc = (InternalLocator) Locator.getLocator();
+        if (loc != null) {
+          loc.stop(true, !distribution.disableAutoReconnect, true);
+        }
+      }
+      // dm.setRootCause() should be called after saveConfig() and closing locators
+      // otherwise, the distribution will be impacted
+      if (reason != null) {
+        distribution.clusterDistributionManager.setRootCause(new ForcedDisconnectException(reason));
       }
     }
   }

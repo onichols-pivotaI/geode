@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.apache.shiro.SecurityUtils;
 import org.apache.shiro.ShiroException;
+import org.apache.shiro.UnavailableSecurityManagerException;
 import org.apache.shiro.session.Session;
 import org.apache.shiro.subject.Subject;
 import org.apache.shiro.subject.support.SubjectThreadState;
@@ -36,12 +37,15 @@ import org.apache.shiro.util.ThreadContext;
 import org.apache.shiro.util.ThreadState;
 
 import org.apache.geode.GemFireIOException;
+import org.apache.geode.annotations.VisibleForTesting;
+import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.internal.cache.EntryEventImpl;
 import org.apache.geode.internal.security.shiro.GeodeAuthenticationToken;
 import org.apache.geode.internal.security.shiro.SecurityManagerProvider;
 import org.apache.geode.internal.security.shiro.ShiroPrincipal;
 import org.apache.geode.internal.util.BlobHelper;
 import org.apache.geode.logging.internal.log4j.api.LogService;
+import org.apache.geode.security.AuthenticationExpiredException;
 import org.apache.geode.security.AuthenticationFailedException;
 import org.apache.geode.security.AuthenticationRequiredException;
 import org.apache.geode.security.GemFireSecurityException;
@@ -116,14 +120,23 @@ public class IntegratedSecurityService implements SecurityService {
       }
     }
 
-    // in other cases like rest call, client operations, we get it from the current thread
-    currentUser = SecurityUtils.getSubject();
+    try {
+      // in other cases like rest call, client operations, we get it from the current thread
+      currentUser = getCurrentUser();
+    } catch (UnavailableSecurityManagerException e) {
+      throw new CacheClosedException("Cache is closed.", e);
+    }
 
     if (currentUser == null || currentUser.getPrincipal() == null) {
       throw new AuthenticationRequiredException("Failed to find the authenticated user.");
     }
 
     return currentUser;
+  }
+
+  @VisibleForTesting
+  Subject getCurrentUser() {
+    return SecurityUtils.getSubject();
   }
 
   /**
@@ -152,15 +165,27 @@ public class IntegratedSecurityService implements SecurityService {
     // this makes sure it starts with a clean user object
     ThreadContext.remove();
 
-    Subject currentUser = SecurityUtils.getSubject();
+    Subject currentUser;
     GeodeAuthenticationToken token = new GeodeAuthenticationToken(credentials);
     try {
       logger.debug("Logging in " + token.getPrincipal());
+      currentUser = getCurrentUser();
       currentUser.login(token);
+    } catch (UnavailableSecurityManagerException e) {
+      throw new CacheClosedException("Cache is closed.");
     } catch (ShiroException e) {
       logger.info("error logging in: " + token.getPrincipal());
+      Throwable cause = e.getCause();
+      if (cause == null) {
+        throw new AuthenticationFailedException(
+            "Authentication error. Please check your credentials.", e);
+      }
+      if (cause instanceof AuthenticationFailedException
+          || cause instanceof AuthenticationExpiredException) {
+        throw (GemFireSecurityException) cause;
+      }
       throw new AuthenticationFailedException(
-          "Authentication error. Please check your credentials.", e);
+          "Authentication error. Please check your credentials.", cause);
     }
 
     Session currentSession = currentUser.getSession();
@@ -246,21 +271,8 @@ public class IntegratedSecurityService implements SecurityService {
 
   @Override
   public void authorize(final ResourcePermission context) {
-    if (context == null) {
-      return;
-    }
-    if (context.getResource() == Resource.NULL && context.getOperation() == Operation.NULL) {
-      return;
-    }
-
     Subject currentUser = getSubject();
-    try {
-      currentUser.checkPermission(context);
-    } catch (ShiroException e) {
-      String message = currentUser.getPrincipal() + " not authorized for " + context;
-      logger.info("NotAuthorizedException: {}", message);
-      throw new NotAuthorizedException(message, e);
-    }
+    authorize(context, currentUser);
   }
 
   @Override

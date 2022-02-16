@@ -37,7 +37,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import junitparams.JUnitParamsRunner;
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.junit.Before;
@@ -59,8 +58,9 @@ import org.apache.geode.test.dunit.rules.ClusterStartupRule;
 import org.apache.geode.test.dunit.rules.MemberVM;
 import org.apache.geode.test.junit.rules.GfshCommandRule;
 import org.apache.geode.test.junit.rules.VMProvider;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class AlterQueryServiceCommandWithSecurityDUnitTest {
   private static final Class<RestrictedMethodAuthorizer> DEFAULT_AUTHORIZER_CLASS =
       RestrictedMethodAuthorizer.class;
@@ -71,7 +71,7 @@ public class AlterQueryServiceCommandWithSecurityDUnitTest {
   private static final String REGEX_AUTHORIZER_PARAMETERS =
       "^java.util.List..{4,8}$;^java.util.Set..{4,8}$";
   private MemberVM locator;
-  private List<MemberVM> servers = new ArrayList<>();
+  private final List<MemberVM> servers = new ArrayList<>();
 
   @Rule
   public GfshCommandRule gfsh = new GfshCommandRule();
@@ -139,7 +139,7 @@ public class AlterQueryServiceCommandWithSecurityDUnitTest {
 
   private String getTestMethodAuthorizerFilePath() throws IOException {
     URL url = getClass().getResource(TEST_AUTHORIZER_TXT);
-    File textFile = this.tempFolder.newFile(TEST_AUTHORIZER_TXT);
+    File textFile = tempFolder.newFile(TEST_AUTHORIZER_TXT);
     FileUtils.copyURLToFile(url, textFile);
 
     return textFile.getAbsolutePath();

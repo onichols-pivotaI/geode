@@ -58,6 +58,11 @@ import static org.apache.geode.distributed.ConfigurationProperties.GATEWAY_SSL_P
 import static org.apache.geode.distributed.ConfigurationProperties.GATEWAY_SSL_REQUIRE_AUTHENTICATION;
 import static org.apache.geode.distributed.ConfigurationProperties.GATEWAY_SSL_TRUSTSTORE;
 import static org.apache.geode.distributed.ConfigurationProperties.GATEWAY_SSL_TRUSTSTORE_PASSWORD;
+import static org.apache.geode.distributed.ConfigurationProperties.GEODE_FOR_REDIS_BIND_ADDRESS;
+import static org.apache.geode.distributed.ConfigurationProperties.GEODE_FOR_REDIS_ENABLED;
+import static org.apache.geode.distributed.ConfigurationProperties.GEODE_FOR_REDIS_PORT;
+import static org.apache.geode.distributed.ConfigurationProperties.GEODE_FOR_REDIS_REDUNDANT_COPIES;
+import static org.apache.geode.distributed.ConfigurationProperties.GEODE_FOR_REDIS_USERNAME;
 import static org.apache.geode.distributed.ConfigurationProperties.GROUPS;
 import static org.apache.geode.distributed.ConfigurationProperties.HTTP_SERVICE_BIND_ADDRESS;
 import static org.apache.geode.distributed.ConfigurationProperties.HTTP_SERVICE_PORT;
@@ -111,10 +116,6 @@ import static org.apache.geode.distributed.ConfigurationProperties.MEMCACHED_POR
 import static org.apache.geode.distributed.ConfigurationProperties.MEMCACHED_PROTOCOL;
 import static org.apache.geode.distributed.ConfigurationProperties.NAME;
 import static org.apache.geode.distributed.ConfigurationProperties.OFF_HEAP_MEMORY_SIZE;
-import static org.apache.geode.distributed.ConfigurationProperties.REDIS_BIND_ADDRESS;
-import static org.apache.geode.distributed.ConfigurationProperties.REDIS_ENABLED;
-import static org.apache.geode.distributed.ConfigurationProperties.REDIS_PASSWORD;
-import static org.apache.geode.distributed.ConfigurationProperties.REDIS_PORT;
 import static org.apache.geode.distributed.ConfigurationProperties.REDUNDANCY_ZONE;
 import static org.apache.geode.distributed.ConfigurationProperties.REMOTE_LOCATORS;
 import static org.apache.geode.distributed.ConfigurationProperties.REMOVE_UNRESPONSIVE_CLIENT;
@@ -349,11 +350,12 @@ public abstract class AbstractDistributionConfig extends AbstractConfig
   }
 
   @ConfigAttributeChecker(name = CLUSTER_SSL_ENABLED)
-  protected Boolean checkClusterSSLEnabled(Boolean value) {
+  protected boolean checkClusterSSLEnabled(boolean value) {
     if (value && getMcastPort() != 0) {
       throw new IllegalArgumentException(
-          String.format("Could not set %s to %s because its value must be false when %s is not 0.",
-              CLUSTER_SSL_ENABLED, value, MCAST_PORT));
+          String.format(
+              "Could not set %s to true because its value must be false when %s is not 0.",
+              CLUSTER_SSL_ENABLED, MCAST_PORT));
     }
     return value;
   }
@@ -668,12 +670,12 @@ public abstract class AbstractDistributionConfig extends AbstractConfig
     return value;
   }
 
-  @ConfigAttributeChecker(name = REDIS_BIND_ADDRESS)
+  @ConfigAttributeChecker(name = GEODE_FOR_REDIS_BIND_ADDRESS)
   protected String checkRedisBindAddress(String value) {
     if (value != null && value.length() > 0 && !LocalHostUtil.isLocalHost(value)) {
       throw new IllegalArgumentException(
           String.format(
-              "The compatible-with-redis-bind-address %s is not a valid address for this machine.  These are the valid addresses for this machine: %s",
+              "The geode-for-redis-bind-address %s is not a valid address for this machine.  These are the valid addresses for this machine: %s",
               value, LocalHostUtil.getMyAddresses()));
     }
     return value;
@@ -1312,14 +1314,16 @@ public abstract class AbstractDistributionConfig extends AbstractConfig
         "The protocol that GemFireMemcachedServer understands. Default is ASCII. Values may be ASCII or BINARY");
     m.put(MEMCACHED_BIND_ADDRESS,
         "The address the GemFireMemcachedServer will listen on for remote connections. Default is \"\" which causes the GemFireMemcachedServer to listen on the host's default address. This property is ignored if memcached-port is \"0\".");
-    m.put(REDIS_BIND_ADDRESS,
-        "Specifies the address on which the Redis API for Geode is listening. If set to the empty string or this property is not specified, localhost is requested from the operating system.");
-    m.put(REDIS_ENABLED,
-        "When the default value of false, the Redis API for Geode is not available.  Set to true to enable the Redis API for Geode.");
-    m.put(REDIS_PASSWORD,
-        "Specifies the password that the server uses when a client attempts to authenticate. The default is none and no authentication will be required.");
-    m.put(REDIS_PORT,
-        "Specifies the port on which the server listens for Redis API for Geode connections. A value of 0 selects a random port.  Default is 6379.");
+    m.put(GEODE_FOR_REDIS_BIND_ADDRESS,
+        "Specifies the address on which the Geode for Redis server is listening. If set to the empty string or this property is not specified, then all local addresses are listened to.  Default is an empty string.");
+    m.put(GEODE_FOR_REDIS_ENABLED,
+        "When false Geode for Redis is not available. Set to true to enable Geode for Redis.  Default is false.");
+    m.put(GEODE_FOR_REDIS_USERNAME,
+        "Specifies the username that the Geode for Redis server uses when a client attempts to authenticate using only a password. The default is 'default'.");
+    m.put(GEODE_FOR_REDIS_PORT,
+        "Specifies the port on which the Geode for Redis server listens for client connections. A value of 0 selects a random port.  Default is 6379.");
+    m.put(GEODE_FOR_REDIS_REDUNDANT_COPIES,
+        "Specifies how many extra copies of data will be stored in the cluster by Geode for Redis.  Default is 1.");
     m.put(ENABLE_CLUSTER_CONFIGURATION,
         "Enables cluster configuration support in dedicated locators.  This allows the locator to share configuration information amongst members and save configuration changes made using GFSH.");
     m.put(ENABLE_MANAGEMENT_REST_SERVICE,

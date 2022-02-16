@@ -97,11 +97,6 @@ public class CliStrings {
       "The name of the class implementing CustomExpiry for entry idle time. Append json string for initialization properties.";
   public static final String ENTRY_TTL_CUSTOM_EXPIRY_HELP =
       "The name of the class implementing CustomExpiry for entry time to live. Append json string for initialization properties.";
-  public static final String DEPLOYMENT__NAME = "name";
-  public static final String DEPLOYMENT__NAMES = "names";
-  public static final String DEPLOYMENT__NAME__HELP = "The name for the jar deployment.";
-  public static final String CANNOT_SPECIFY_JARS_AND_DEPLOYMENT_NAMES =
-      "Cannot specify jars and names";
   private static final String LOG_LEVEL_VALUES =
       "Possible values for log-level include: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF.";
 
@@ -605,6 +600,7 @@ public class CliStrings {
   public static final String CONNECT__USE_HTTP__HELP =
       "[Deprecated: inferred by the presence of --url]. Connects to Manager by sending HTTP requests to HTTP service hosting the Management REST API. You must first 'disconnect' in order to reconnect to the Manager via locator or jmx-manager using JMX.";
   public static final String CONNECT__USERNAME = "user";
+  public static final String CONNECT__USERNAME_LONGFORM = "username";
   public static final String CONNECT__USERNAME__HELP =
       "User name to securely connect to the jmx-manager. If the --password parameter is not specified then it will be prompted for.";
   public static final String CONNECT__PASSWORD = "password";
@@ -758,7 +754,7 @@ public class CliStrings {
       "For asynchronous queueing. The number of milliseconds that can elapse before data is flushed to disk. Reaching this limit or the queue-size limit causes the queue to flush.";
   public static final String CREATE_DISK_STORE__WRITE_BUFFER_SIZE = "write-buffer-size";
   public static final String CREATE_DISK_STORE__WRITE_BUFFER_SIZE__HELP =
-      "Size of the buffer used to write to disk.";
+      "Size in bytes of the buffer used to write to disk.";
   public static final String CREATE_DISK_STORE__DIRECTORY_AND_SIZE = "dir";
   public static final String CREATE_DISK_STORE__DIRECTORY_AND_SIZE__HELP =
       "Directories where the disk store files will be written, the directories will be created if they don't exist.  Optionally, directory names may be followed by # and the maximum number of megabytes that the disk store can use in the directory.  Example: --dir=/data/ds1 --dir=/data/ds2#5000";
@@ -774,6 +770,12 @@ public class CliStrings {
       "Critical percentage for disk volume usage.";
   public static final String CREATE_DISK_STORE__ERROR_WHILE_CREATING_REASON_0 =
       "An error occurred while creating the disk store: \"{0}\"";
+  public static final String CREATE_DISK_STORE__DIR_SIZE_TOO_BIG_ERROR =
+      "Directory size (%s) is over the maximum allowed value.";
+  public static final String CREATE_DISK_STORE__DIR_SIZE_IS_NEGATIVE =
+      "Directory size cannot be negative (%s)";
+  public static final String CREATE_DISK_STORE__DIR_SIZE_NOT_A_NUMBER =
+      "Incorrect directory size specified (%s)";
 
   /* create index */
   public static final String CREATE_INDEX = "create index";
@@ -2632,18 +2634,6 @@ public class CliStrings {
   public static final String START_SERVER__PROPERTIES = "properties-file";
   public static final String START_SERVER__PROPERTIES__HELP =
       "The gemfire.properties file for configuring the Cache Server's distributed system. The file's path can be absolute or relative to the gfsh working directory.";
-  public static final String START_SERVER__REDIS_BIND_ADDRESS =
-      ConfigurationProperties.REDIS_BIND_ADDRESS;
-  public static final String START_SERVER__REDIS_BIND_ADDRESS__HELP =
-      "Specifies the address on which the Redis API for Geode is listening. "
-          + "If set to the empty string or this property is not specified, the server listens on all local addresses.";
-  public static final String START_SERVER__REDIS_PASSWORD = ConfigurationProperties.REDIS_PASSWORD;
-  public static final String START_SERVER__REDIS_PASSWORD__HELP =
-      "Specifies the password that the server uses when a client attempts to authenticate."
-          + " The default is none and no authentication will be required.";
-  public static final String START_SERVER__REDIS_PORT = ConfigurationProperties.REDIS_PORT;
-  public static final String START_SERVER__REDIS_PORT__HELP =
-      "Specifies the port on which the server listens for Redis API for Geode connections. A value of 0 selects a random port.  Default is 6379.";
   public static final String START_SERVER__SECURITY_PROPERTIES = "security-properties-file";
   public static final String START_SERVER__SECURITY_PROPERTIES__HELP =
       "The gfsecurity.properties file for configuring the Server's security configuration in the distributed system. The file's path can be absolute or relative to gfsh directory.";
@@ -3031,10 +3021,14 @@ public class CliStrings {
       "GatewayReceiver is not running on member {0}";
   public static final String GATEWAYS_ARE_NOT_AVAILABLE_IN_CLUSTER =
       "GatewaySenders or GatewayReceivers are not available in cluster";
-  public static final String GATEWAY_SENDER_0_COULD_NOT_BE_INVOKED_DUE_TO_1 =
+  public static final String GATEWAY_SENDER_START_0_COULD_NOT_BE_INVOKED_DUE_TO_1 =
       "Could not invoke start gateway sender {0} operation on members due to {1}";
   public static final String GATEWAY_SENDER_0_COULD_NOT_BE_STARTED_ON_MEMBER_DUE_TO_1 =
       "Could not start gateway sender {0} on member due to {1}";
+  public static final String GATEWAY_SENDER_STOP_0_COULD_NOT_BE_INVOKED_DUE_TO_1 =
+      "Could not invoke stop gateway sender {0} operation on members due to {1}";
+  public static final String GATEWAY_SENDER_0_COULD_NOT_BE_STOPPED_ON_MEMBER_DUE_TO_1 =
+      "Could not stop gateway sender {0} on member due to {1}";
   public static final String GATEWAY_SENDER_0_IS_UPDATED_ON_MEMBER_1 =
       "GatewaySender {0} is updated on member {1}";
   /* end gateway command messages */
@@ -3260,6 +3254,7 @@ public class CliStrings {
   public static final String START_SERVER__HTTP_SERVICE_BIND_ADDRESS__HELP =
       "The IP address on which the HTTP Service will be bound.  By default, the Server is bound to all local addresses.";
   public static final String START_SERVER__USERNAME = "user";
+  public static final String START_SERVER__USERNAME_LONGFORM = "username";
   public static final String START_SERVER__USERNAME__HELP =
       "User name to securely connect to the cluster. If the --password parameter is not specified then it will be prompted for.";
   public static final String START_SERVER__PASSWORD = "password";

@@ -18,6 +18,7 @@ import static org.apache.geode.distributed.ConfigurationProperties.SECURITY_CLIE
 import static org.apache.geode.distributed.ConfigurationProperties.SECURITY_CLIENT_ACCESSOR_PP;
 import static org.apache.geode.distributed.ConfigurationProperties.SECURITY_CLIENT_AUTHENTICATOR;
 import static org.apache.geode.internal.monitoring.ThreadsMonitoring.Mode.ServerConnectionExecutor;
+import static org.apache.geode.logging.internal.spi.LoggingProvider.SECURITY_LOGGER_NAME;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -38,11 +39,13 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.apache.logging.log4j.Logger;
 import org.apache.shiro.subject.Subject;
 import org.apache.shiro.util.ThreadState;
+import org.jetbrains.annotations.TestOnly;
 
 import org.apache.geode.CancelException;
 import org.apache.geode.DataSerializer;
@@ -50,6 +53,7 @@ import org.apache.geode.SystemFailure;
 import org.apache.geode.annotations.VisibleForTesting;
 import org.apache.geode.annotations.internal.MakeNotStatic;
 import org.apache.geode.annotations.internal.MutableForTesting;
+import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.UnsupportedVersionException;
 import org.apache.geode.cache.client.internal.Connection;
 import org.apache.geode.distributed.DistributedSystem;
@@ -65,6 +69,7 @@ import org.apache.geode.internal.cache.tier.InternalClientMembership;
 import org.apache.geode.internal.cache.tier.MessageType;
 import org.apache.geode.internal.cache.tier.ServerSideHandshake;
 import org.apache.geode.internal.cache.tier.sockets.command.Default;
+import org.apache.geode.internal.cache.tier.sockets.command.PutUserCredentials;
 import org.apache.geode.internal.logging.InternalLogWriter;
 import org.apache.geode.internal.monitoring.ThreadsMonitoring;
 import org.apache.geode.internal.monitoring.executor.AbstractExecutor;
@@ -75,6 +80,7 @@ import org.apache.geode.internal.serialization.ByteArrayDataInput;
 import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.internal.util.Breadcrumbs;
 import org.apache.geode.logging.internal.log4j.api.LogService;
+import org.apache.geode.security.AuthenticationExpiredException;
 import org.apache.geode.security.AuthenticationFailedException;
 import org.apache.geode.security.AuthenticationRequiredException;
 import org.apache.geode.security.GemFireSecurityException;
@@ -90,6 +96,7 @@ import org.apache.geode.security.NotAuthorizedException;
 public class ServerConnection implements Runnable {
 
   protected static final Logger logger = LogService.getLogger();
+  private static final Logger secureLogger = LogService.getLogger(SECURITY_LOGGER_NAME);
 
   /**
    * This is a buffer that we add to client readTimeout value before we cleanup the connection. This
@@ -99,6 +106,8 @@ public class ServerConnection implements Runnable {
 
   private static final String DISALLOW_INTERNAL_MESSAGES_WITHOUT_CREDENTIALS_NAME =
       "geode.disallow-internal-messages-without-credentials";
+
+  public static final String USER_NOT_FOUND = "User authorization attributes not found.";
 
   /**
    * When true requires some formerly credential-less messages to carry credentials. See GEODE-3249
@@ -253,6 +262,7 @@ public class ServerConnection implements Runnable {
 
 
   private ClientUserAuths clientUserAuths;
+  private final Object clientUserAuthsLock = new Object();
 
   // this is constant(server and client) for first user request, after that it is random
   // this also need to send in handshake
@@ -342,6 +352,12 @@ public class ServerConnection implements Runnable {
     return executeFunctionOnLocalNodeOnly.get();
   }
 
+  @VisibleForTesting
+  void setServerConnectionCollection(
+      ServerConnectionCollection serverConnectionCollection) {
+    this.serverConnectionCollection = serverConnectionCollection;
+  }
+
   private boolean verifyClientConnection() {
     synchronized (handshakeMonitor) {
       if (handshake == null) {
@@ -385,7 +401,6 @@ public class ServerConnection implements Runnable {
         if (getCommunicationMode().isWAN()) {
           try {
             setAuthAttributes();
-
           } catch (AuthenticationRequiredException | AuthenticationFailedException ex) {
             handleHandshakeAuthenticationException(ex);
             return false;
@@ -521,18 +536,13 @@ public class ServerConnection implements Runnable {
   }
 
   private long setUserAuthorizeAndPostAuthorizeRequest(AuthorizeRequest authzRequest,
-      AuthorizeRequestPP postAuthzRequest) throws IOException {
+      AuthorizeRequestPP postAuthzRequest) {
     UserAuthAttributes userAuthAttr = new UserAuthAttributes(authzRequest, postAuthzRequest);
-    if (clientUserAuths == null) {
-      initializeClientUserAuths();
-    }
-    try {
-      return clientUserAuths.putUserAuth(userAuthAttr);
-    } catch (NullPointerException exception) {
-      if (isTerminated()) {
-        throw new IOException("Server connection is terminated.");
+    synchronized (clientUserAuthsLock) {
+      if (clientUserAuths == null) {
+        initializeClientUserAuths();
       }
-      throw exception;
+      return clientUserAuths.putUserAuth(userAuthAttr);
     }
   }
 
@@ -785,7 +795,9 @@ public class ServerConnection implements Runnable {
     if (verifyClientConnection()) {
       initializeCommands();
       if (!getCommunicationMode().isWAN()) {
-        initializeClientUserAuths();
+        synchronized (clientUserAuthsLock) {
+          initializeClientUserAuths();
+        }
       }
     }
     if (TEST_VERSION_AFTER_HANDSHAKE_FLAG) {
@@ -802,9 +814,16 @@ public class ServerConnection implements Runnable {
       processMessages = false;
       return;
     }
-    Message message = BaseCommand.readRequest(this);
+
+    Message message = getMessage();
     if (!serverConnectionCollection.incrementConnectionsProcessing()) {
       // Client is being disconnected, don't try to process message.
+      processMessages = false;
+      return;
+    }
+
+    if (isTerminated()) {
+      // Client is being terminated, don't try to process message.
       processMessages = false;
       return;
     }
@@ -857,26 +876,7 @@ public class ServerConnection implements Runnable {
 
         // if a subject exists for this uniqueId, binds the subject to this thread so that we can do
         // authorization later
-        if (securityService.isIntegratedSecurity()
-            && !isInternalMessage(requestMessage, allowInternalMessagesWithoutCredentials)
-            && !communicationMode.isWAN()) {
-          long uniqueId = getUniqueId();
-          String messageType = MessageType.getString(requestMessage.getMessageType());
-          Subject subject = clientUserAuths.getSubject(uniqueId);
-          if (subject != null) {
-            threadState = securityService.bindSubject(subject);
-            logger.debug("Bound {} with uniqueId {} for message {} with {}", subject.getPrincipal(),
-                uniqueId, messageType, getName());
-          } else if (uniqueId == 0) {
-            logger.debug("No unique ID yet. {}, {}", messageType, getName());
-          } else {
-            logger.warn(
-                "Failed to bind the subject of uniqueId {} for message {} with {} : Possible re-authentication required",
-                uniqueId, messageType, getName());
-            throw new AuthenticationRequiredException("Failed to find the authenticated user.");
-          }
-        }
-
+        threadState = bindSubject(command);
         command.execute(message, this, securityService);
       }
     } finally {
@@ -892,13 +892,58 @@ public class ServerConnection implements Runnable {
     }
   }
 
+  ThreadState bindSubject(Command command) {
+    if (!securityService.isIntegratedSecurity()) {
+      return null;
+    }
+
+    if (communicationMode.isWAN()) {
+      return null;
+    }
+
+    if (command instanceof PutUserCredentials) {
+      return null;
+    }
+
+    if (isInternalMessage(requestMessage, allowInternalMessagesWithoutCredentials)) {
+      return null;
+    }
+
+    long uniqueId = getUniqueId();
+    String messageType = MessageType.getString(requestMessage.getMessageType());
+    if (uniqueId == 0 || uniqueId == -1) {
+      logger.debug("No unique ID yet. {}, {}", messageType, getName());
+      return null;
+    }
+
+    Subject subject = clientUserAuths.getSubject(uniqueId);
+    if (subject == null) {
+      secureLogger.warn(
+          "Failed to bind the subject of uniqueId {} for message {} with {} : Possible re-authentication required",
+          uniqueId, messageType, getName());
+      throw new AuthenticationRequiredException("Failed to find the authenticated user.");
+    }
+
+    ThreadState threadState = securityService.bindSubject(subject);
+    secureLogger.debug("Bound {} with uniqueId {} for message {} with {}", subject.getPrincipal(),
+        uniqueId, messageType, getName());
+
+    return threadState;
+  }
+
+  @VisibleForTesting
+  Message getMessage() {
+    return BaseCommand.readRequest(this);
+  }
+
   private void suspendThreadMonitoring() {
     if (threadMonitorExecutor != null) {
       threadMonitorExecutor.suspendMonitoring();
     }
   }
 
-  private void resumeThreadMonitoring() {
+  @VisibleForTesting
+  void resumeThreadMonitoring() {
     if (threadMonitorExecutor != null) {
       threadMonitorExecutor.resumeMonitoring();
     }
@@ -913,9 +958,13 @@ public class ServerConnection implements Runnable {
     }
   }
 
+  // this needs to be synchronized to avoid NPE between null check and cleanup
   private void cleanClientAuths() {
-    if (clientUserAuths != null) {
-      clientUserAuths.cleanup(false);
+    synchronized (clientUserAuthsLock) {
+      if (clientUserAuths != null) {
+        clientUserAuths.cleanup(false);
+        clientUserAuths = null;
+      }
     }
   }
 
@@ -934,6 +983,7 @@ public class ServerConnection implements Runnable {
       }
       terminated = true;
     }
+
     setNotProcessingMessage();
     boolean clientDeparted = false;
     boolean cleanupStats = false;
@@ -995,17 +1045,19 @@ public class ServerConnection implements Runnable {
         chmRegistered = false;
       }
     }
-    if (unregisterClient) {
-      // last serverconnection call all close on auth objects
-      cleanClientAuths();
-    }
-    clientUserAuths = null;
+
     if (needsUnregister) {
       acceptor.getClientHealthMonitor().removeConnection(proxyId, this);
       if (unregisterClient) {
         acceptor.getClientHealthMonitor().unregisterClient(proxyId, getAcceptor(),
             clientDisconnectedCleanly, clientDisconnectedException);
       }
+    }
+
+    if (unregisterClient) {
+      // last server connection call all close on auth objects
+      secureLogger.debug("ServerConnection.handleTermination clean client auths");
+      cleanClientAuths();
     }
 
     if (cleanupStats) {
@@ -1028,7 +1080,10 @@ public class ServerConnection implements Runnable {
   }
 
   static ClientUserAuths getClientUserAuths(ClientProxyMembershipID proxyId) {
-    ClientUserAuths clientUserAuths = new ClientUserAuths(proxyId.hashCode());
+    int proxyIdHashCode = proxyId.hashCode();
+    Consumer<Random> initializer = r -> r.setSeed(proxyIdHashCode + System.currentTimeMillis());
+    SubjectIdGenerator idGenerator = new RandomSubjectIdGenerator(new Random(), initializer);
+    ClientUserAuths clientUserAuths = new ClientUserAuths(idGenerator);
     ClientUserAuths returnedClientUserAuths =
         proxyIdVsClientUserAuths.putIfAbsent(proxyId, clientUserAuths);
 
@@ -1069,93 +1124,54 @@ public class ServerConnection implements Runnable {
         throw new AuthenticationFailedException("Authentication failed");
       }
 
-      try {
-        // first try integrated security
-        boolean removed = clientUserAuths.removeSubject(aIds.getUniqueId());
-
-        // if not successful, try the old way
-        if (!removed) {
+      synchronized (clientUserAuthsLock) {
+        if (clientUserAuths != null) {
+          // first try integrated security
+          clientUserAuths.removeSubject(aIds.getUniqueId());
+          // then, try the old way
           clientUserAuths.removeUserId(aIds.getUniqueId(), keepAlive);
         }
-      } catch (NullPointerException exception) {
-        logger.debug("Exception", exception);
       }
     } catch (Exception exception) {
       throw new AuthenticationFailedException("Authentication failed", exception);
     }
   }
 
-  public byte[] setCredentials(Message message) {
+  public byte[] setCredentials(Message message, long existingUniqueId) {
+    // need to get connection id from secure part of message, before that need to insure
+    // encryption of id
+    // need to check here, whether it matches with serverConnection id or not
+    // need to decrypt bytes if its in DH mode
+    // need to get properties of credentials(need to remove extra stuff if something is there from
+    // client)
+    // need to generate unique-id for client
+    // need to send back in response with encryption
+    if (!AcceptorImpl.isAuthenticationRequired() && message.isSecureMode()) {
+      /*
+       * This means that client and server VMs have different security settings. The server does
+       * not have any security settings specified while client has.
+       *
+       * Here, should we just ignore this and send the dummy security part (connectionId, userId)
+       * in the response (in this case, client needs to know that it is not expected to read any
+       * security part in any of the server response messages) or just throw an exception
+       * indicating bad configuration?
+       */
+      // This is a CREDENTIALS_NORMAL case.;
+      return new byte[0];
+    }
+    if (!message.isSecureMode()) {
+      throw new AuthenticationFailedException("Authentication failed");
+    }
+    return getUniqueIdBytes(message, existingUniqueId);
+  }
+
+  @VisibleForTesting
+  byte[] getUniqueIdBytes(Message message, long existingUniqueId) {
     try {
-      // need to get connection id from secure part of message, before that need to insure
-      // encryption of id
-      // need to check here, whether it matches with serverConnection id or not
-      // need to decrypt bytes if its in DH mode
-      // need to get properties of credentials(need to remove extra stuff if something is there from
-      // client)
-      // need to generate unique-id for client
-      // need to send back in response with encryption
-      if (!AcceptorImpl.isAuthenticationRequired() && message.isSecureMode()) {
-        /*
-         * This means that client and server VMs have different security settings. The server does
-         * not have any security settings specified while client has.
-         *
-         * Here, should we just ignore this and send the dummy security part (connectionId, userId)
-         * in the response (in this case, client needs to know that it is not expected to read any
-         * security part in any of the server response messages) or just throw an exception
-         * indicating bad configuration?
-         */
-        // This is a CREDENTIALS_NORMAL case.;
-        return new byte[0];
-      }
-      if (!message.isSecureMode()) {
-        throw new AuthenticationFailedException("Authentication failed");
-      }
-
-      byte[] secureBytes = message.getSecureBytes();
-
-      secureBytes = handshake.getEncryptor().decryptBytes(secureBytes);
-
-      // need to decrypt it first then get connectionid
-      AuthIds aIds = new AuthIds(secureBytes);
-
-      long connId = aIds.getConnectionId();
-
-      if (connId != connectionId) {
-        throw new AuthenticationFailedException("Authentication failed");
-      }
-
-      byte[] credBytes = message.getPart(0).getSerializedForm();
-
-      credBytes = handshake.getEncryptor().decryptBytes(credBytes);
-
-      Properties credentials;
-      try (ByteArrayDataInput dinp = new ByteArrayDataInput(credBytes)) {
-        credentials = DataSerializer.readProperties(dinp);
-      }
-
-      // When here, security is enforced on server, if login returns a subject, then it's the newly
-      // integrated security, otherwise, do it the old way.
-      long uniqueId;
-
-      DistributedSystem system = getDistributedSystem();
-      String methodName = system.getProperties().getProperty(SECURITY_CLIENT_AUTHENTICATOR);
-
-      Object principal = Handshake.verifyCredentials(methodName, credentials,
-          system.getSecurityProperties(), (InternalLogWriter) system.getLogWriter(),
-          (InternalLogWriter) system.getSecurityLogWriter(), proxyId.getDistributedMember(),
-          securityService);
-      if (principal instanceof Subject) {
-        Subject subject = (Subject) principal;
-        uniqueId = clientUserAuths.putSubject(subject);
-      } else {
-        // this sets principal in map as well....
-        uniqueId = getUniqueId((Principal) principal);
-      }
-
-      // create secure part which will be send in response
-      return encryptId(uniqueId);
-    } catch (AuthenticationFailedException | AuthenticationRequiredException exception) {
+      // create secure part which will be sent in response
+      return encryptId(getUniqueId(message, existingUniqueId));
+    } catch (AuthenticationFailedException | AuthenticationRequiredException | CacheClosedException
+        | AuthenticationExpiredException exception) {
       throw exception;
     } catch (Exception exception) {
       throw new AuthenticationFailedException("REPLY_REFUSED", exception);
@@ -1163,8 +1179,72 @@ public class ServerConnection implements Runnable {
   }
 
   @VisibleForTesting
+  long getUniqueId(Message message, long existingUniqueId) throws Exception {
+    byte[] secureBytes = message.getSecureBytes();
+    secureBytes = handshake.getEncryptor().decryptBytes(secureBytes);
+
+    // need to decrypt it first then get connectionid
+    AuthIds aIds = new AuthIds(secureBytes);
+
+    long connId = aIds.getConnectionId();
+
+    if (connId != connectionId) {
+      throw new AuthenticationFailedException("Authentication failed");
+    }
+
+    byte[] credBytes = message.getPart(0).getSerializedForm();
+    credBytes = handshake.getEncryptor().decryptBytes(credBytes);
+
+    Properties credentials;
+    try (ByteArrayDataInput dinp = new ByteArrayDataInput(credBytes)) {
+      credentials = DataSerializer.readProperties(dinp);
+    }
+
+    // When here, security is enforced on server, if login returns a subject, then it's the newly
+    // integrated security, otherwise, do it the old way.
+    long uniqueId;
+    DistributedSystem system = getDistributedSystem();
+    String methodName = system.getProperties().getProperty(SECURITY_CLIENT_AUTHENTICATOR);
+
+    Object principal = Handshake.verifyCredentials(methodName, credentials,
+        system.getSecurityProperties(), (InternalLogWriter) system.getLogWriter(),
+        (InternalLogWriter) system.getSecurityLogWriter(), proxyId.getDistributedMember(),
+        securityService);
+    if (principal instanceof Subject) {
+      uniqueId = putSubject((Subject) principal, existingUniqueId);
+    } else {
+      // this sets principal in map as well....
+      uniqueId = getUniqueId((Principal) principal);
+    }
+    return uniqueId;
+  }
+
+  @VisibleForTesting
+  long putSubject(Subject subject, long existingUniqueId) {
+    final long uniqueId = clientUserAuths.putSubject(subject, existingUniqueId);
+    // also update the subject in the CacheClientProxy if it's in single user mode
+    CacheClientProxy clientProxy =
+        getAcceptor().getCacheClientNotifier().getClientProxy(getProxyID());
+    // update the subject (in single user mode) in clientProxy if exists
+    if (clientProxy != null && clientProxy.getSubject() != null
+        && clientProxy.isWaitingForReAuthentication()) {
+      secureLogger.debug("update subject on client proxy {} with uniqueId {}", clientProxy,
+          uniqueId);
+      clientProxy.setSubject(subject);
+    }
+    return uniqueId;
+  }
+
+  @TestOnly
   protected ClientUserAuths getClientUserAuths() {
     return clientUserAuths;
+  }
+
+  @TestOnly
+  protected void setClientUserAuths(ClientUserAuths clientUserAuths) {
+    synchronized (clientUserAuthsLock) {
+      this.clientUserAuths = clientUserAuths;
+    }
   }
 
   private void setSecurityPart() {
@@ -1484,7 +1564,7 @@ public class ServerConnection implements Runnable {
           communicationMode.isWAN() ? "WANSocketCloser" : "CacheServerSocketCloser";
       acceptor.getSocketCloser().asyncClose(theSocket, closerName, () -> {
       },
-          () -> cleanupAfterSocketClose());
+          this::cleanupAfterSocketClose);
       return true;
     }
     cleanupAfterSocketClose();
@@ -1765,16 +1845,13 @@ public class ServerConnection implements Runnable {
     long uniqueId = getUniqueId();
 
     UserAuthAttributes uaa = null;
-    try {
-      uaa = clientUserAuths.getUserAuthAttributes(uniqueId);
-    } catch (NullPointerException npe) {
-      if (isTerminated()) {
-        throw new IOException("Server connection is terminated.");
+    synchronized (clientUserAuthsLock) {
+      if (clientUserAuths != null) {
+        uaa = clientUserAuths.getUserAuthAttributes(uniqueId);
       }
-      logger.debug("Unexpected exception {}", npe.toString());
     }
     if (uaa == null) {
-      throw new AuthenticationRequiredException("User authorization attributes not found.");
+      throw new AuthenticationRequiredException(USER_NOT_FOUND);
     }
     return uaa;
   }
@@ -1809,16 +1886,14 @@ public class ServerConnection implements Runnable {
     long uniqueId = getUniqueId();
 
     UserAuthAttributes uaa = null;
-    try {
-      uaa = clientUserAuths.getUserAuthAttributes(uniqueId);
-    } catch (NullPointerException npe) {
-      if (isTerminated()) {
-        throw new IOException("Server connection is terminated.");
+    synchronized (clientUserAuthsLock) {
+      if (clientUserAuths != null) {
+        uaa = clientUserAuths.getUserAuthAttributes(uniqueId);
       }
-      logger.debug("Unexpected exception", npe);
     }
+
     if (uaa == null) {
-      throw new AuthenticationRequiredException("User authorization attributes not found.");
+      throw new AuthenticationRequiredException(USER_NOT_FOUND);
     }
 
     return uaa.getPostAuthzRequest();
@@ -1851,7 +1926,7 @@ public class ServerConnection implements Runnable {
 
     long uniqueId;
     if (principal instanceof Subject) {
-      uniqueId = getClientUserAuths(getProxyID()).putSubject((Subject) principal);
+      uniqueId = getClientUserAuths(getProxyID()).putSubject((Subject) principal, -1);
     } else {
       // this sets principal in map as well....
       uniqueId = getUniqueId((Principal) principal);
@@ -1861,7 +1936,7 @@ public class ServerConnection implements Runnable {
   }
 
   /**
-   * For legacy auth?
+   * For legacy auth
    */
   private long getUniqueId(Principal principal)
       throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException,

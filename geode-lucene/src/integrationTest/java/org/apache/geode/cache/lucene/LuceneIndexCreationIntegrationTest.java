@@ -37,7 +37,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.KeywordTokenizer;
@@ -68,6 +67,7 @@ import org.apache.geode.internal.cache.BucketNotFoundException;
 import org.apache.geode.internal.cache.LocalRegion;
 import org.apache.geode.internal.cache.PartitionedRegion;
 import org.apache.geode.test.junit.categories.LuceneTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 /**
  * Tests of creating lucene indexes on regions. All tests of index creation use cases should be in
@@ -78,7 +78,7 @@ import org.apache.geode.test.junit.categories.LuceneTest;
  * </ul>
  */
 @Category({LuceneTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class LuceneIndexCreationIntegrationTest extends LuceneIntegrationTest {
 
   @Rule
@@ -232,7 +232,7 @@ public class LuceneIndexCreationIntegrationTest extends LuceneIntegrationTest {
   public void cannotCreateLuceneIndexForReplicateRegion() throws IOException, ParseException {
     try {
       createIndex("field1", "field2", "field3");
-      this.cache.createRegionFactory(RegionShortcut.REPLICATE).create(REGION_NAME);
+      cache.createRegionFactory(RegionShortcut.REPLICATE).create(REGION_NAME);
       fail("Should not have been able to create index");
     } catch (UnsupportedOperationException e) {
       assertEquals("Lucene indexes on replicated regions are not supported", e.getMessage());
@@ -245,7 +245,7 @@ public class LuceneIndexCreationIntegrationTest extends LuceneIntegrationTest {
       throws IOException, ParseException {
     try {
       createIndex("field1", "field2", "field3");
-      RegionFactory regionFactory = this.cache.createRegionFactory(RegionShortcut.PARTITION);
+      RegionFactory regionFactory = cache.createRegionFactory(RegionShortcut.PARTITION);
       regionFactory.setEvictionAttributes(
           EvictionAttributes.createLIFOEntryAttributes(100, EvictionAction.LOCAL_DESTROY));
       regionFactory.create(REGION_NAME);
@@ -262,7 +262,7 @@ public class LuceneIndexCreationIntegrationTest extends LuceneIntegrationTest {
       throws IOException, ParseException {
     try {
       createIndex("field1", "field2", "field3");
-      RegionFactory regionFactory = this.cache.createRegionFactory(RegionShortcut.PARTITION);
+      RegionFactory regionFactory = cache.createRegionFactory(RegionShortcut.PARTITION);
       regionFactory.setEvictionAttributes(
           EvictionAttributes.createLRUHeapAttributes(null, EvictionAction.OVERFLOW_TO_DISK));
       regionFactory.create(REGION_NAME);
@@ -322,7 +322,7 @@ public class LuceneIndexCreationIntegrationTest extends LuceneIntegrationTest {
 
   private static class RecordingAnalyzer extends Analyzer {
 
-    private Set<String> analyzedfields = new HashSet<String>();
+    private final Set<String> analyzedfields = new HashSet<>();
 
     @Override
     protected TokenStreamComponents createComponents(final String fieldName) {

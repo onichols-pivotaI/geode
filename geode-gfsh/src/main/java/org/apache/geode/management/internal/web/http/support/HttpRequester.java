@@ -15,6 +15,8 @@
 
 package org.apache.geode.management.internal.web.http.support;
 
+import static org.apache.geode.internal.util.ProductVersionUtil.getDistributionVersion;
+
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +42,7 @@ import org.springframework.web.client.DefaultResponseErrorHandler;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import org.apache.geode.internal.GemFireVersion;
+import org.apache.geode.internal.version.DistributionVersion;
 import org.apache.geode.management.internal.web.http.converter.SerializableObjectHttpMessageConverter;
 import org.apache.geode.security.AuthenticationFailedException;
 import org.apache.geode.security.NotAuthorizedException;
@@ -58,10 +60,16 @@ import org.apache.geode.security.NotAuthorizedException;
 @SuppressWarnings("unused")
 public class HttpRequester {
   private final RestTemplate restTemplate;
-  private Properties securityProperties;
+  private final Properties securityProperties;
 
-  protected static final String USER_AGENT_HTTP_REQUEST_HEADER_VALUE =
-      "GemFire-Shell/v" + GemFireVersion.getGemFireVersion();
+  protected static final String USER_AGENT_HTTP_REQUEST_HEADER_VALUE;
+
+  static {
+    final DistributionVersion distributionVersion = getDistributionVersion();
+    USER_AGENT_HTTP_REQUEST_HEADER_VALUE =
+        "gfsh (pronounced " + distributionVersion.getName() + " shell)/v"
+            + distributionVersion.getVersion();
+  }
 
   // a list of acceptable content/media types supported by Gfsh
   private final List<MediaType> acceptableMediaTypes = Arrays.asList(MediaType.APPLICATION_JSON,
@@ -162,7 +170,7 @@ public class HttpRequester {
   Object extractResponse(ClientHttpResponse response) throws IOException {
     MediaType mediaType = response.getHeaders().getContentType();
     if (mediaType.equals(MediaType.APPLICATION_JSON)) {
-      return org.apache.commons.io.IOUtils.toString(response.getBody(), "UTF-8");
+      return org.apache.commons.io.IOUtils.toString(response.getBody(), StandardCharsets.UTF_8);
     } else {
       Path tempFile = Files.createTempFile("fileDownload", "");
       if (tempFile.toFile().exists()) {
@@ -178,7 +186,7 @@ public class HttpRequester {
     headers.add(HttpHeaders.USER_AGENT, USER_AGENT_HTTP_REQUEST_HEADER_VALUE);
     headers.setAccept(acceptableMediaTypes);
 
-    if (this.securityProperties != null) {
+    if (securityProperties != null) {
       for (String key : securityProperties.stringPropertyNames()) {
         headers.add(key, securityProperties.getProperty(key));
       }

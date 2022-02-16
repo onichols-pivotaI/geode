@@ -73,6 +73,7 @@ import org.apache.geode.test.dunit.SerializableCallable;
 import org.apache.geode.test.dunit.SerializableRunnable;
 import org.apache.geode.test.dunit.SerializableRunnableIF;
 import org.apache.geode.test.dunit.VM;
+import org.apache.geode.test.dunit.internal.JUnit4DistributedTestCase;
 import org.apache.geode.test.junit.categories.OQLQueryTest;
 
 @Category({OQLQueryTest.class})
@@ -113,7 +114,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       public void run2() throws CacheException {
         configAndStartBridgeServer();
         Region region = getRootRegion().getSubregion(regionName);
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
 
         // Execute query with different type of Results.
         QueryService qs = getCache().getQueryService();
@@ -140,12 +141,12 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         }
         // Pdx objects for local queries now get deserialized when results are iterated.
         // So the deserialized objects are no longer cached in VMCachedDeserializable.
-        assertEquals(numberOfEntries * 2, TestObject.numInstance);
+        assertEquals(numberOfEntries * 2, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
 
@@ -174,7 +175,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           PdxObject(int id, String ticker) {
             super(id, ticker);
           }
-        };
+        }
         for (int i = 0; i < numberOfEntries; i++) {
           region.put("key-" + i, new PdxObject(i, "vmware"));
         }
@@ -188,13 +189,13 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         configAndStartBridgeServer();
         Region region = getRootRegion().getSubregion(regionName);
         System.out.println("##### Region size is: " + region.size());
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
     // Create client region
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -232,14 +233,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -280,13 +281,13 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         configAndStartBridgeServer();
         Region region = getRootRegion().getSubregion(regionName);
         System.out.println("##### Region size is: " + region.size());
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
     // Create client region
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -328,14 +329,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -380,14 +381,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         configAndStartBridgeServer();
         Region region = getRootRegion().getSubregion(regionName);
         System.out.println("##### Region size is: " + region.size());
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
 
       }
     });
 
     // Create client region
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -426,14 +427,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -472,8 +473,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
 
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -550,7 +551,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           }
 
         }
-        assertEquals(2 * numberOfEntries, TestObject.numInstance);
+        assertEquals(2 * numberOfEntries, TestObject.numInstance.get());
       }
     };
 
@@ -561,14 +562,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -635,8 +636,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     });
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -672,9 +673,9 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       public void run2() throws CacheException {
         // Execute query locally.
         QueryService queryService = getCache().getQueryService();
-        for (int i = 0; i < qs.length; i++) {
+        for (final String q : qs) {
           try {
-            Query query = queryService.newQuery(qs[i]);
+            Query query = queryService.newQuery(q);
             SelectResults results = (SelectResults) query.execute();
             for (Object o : results.asList()) {
               if (o instanceof Struct) {
@@ -682,17 +683,17 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
                 for (int c = 0; c < values.length; c++) {
                   if (values[c] instanceof PdxInstance) {
                     fail("Found unexpected PdxInstance in the query results. At struct field [" + c
-                        + "] query :" + qs[i] + " Object is: " + values[c]);
+                        + "] query :" + q + " Object is: " + values[c]);
                   }
                 }
               } else {
                 if (o instanceof PdxInstance) {
-                  fail("Found unexpected PdxInstance in the query results. " + qs[i]);
+                  fail("Found unexpected PdxInstance in the query results. " + q);
                 }
               }
             }
           } catch (Exception e) {
-            Assert.fail("Failed executing " + qs[i], e);
+            Assert.fail("Failed executing " + q, e);
           }
 
         }
@@ -708,9 +709,9 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         cache.setReadSerializedForTest(true);
         try {
           QueryService queryService = getCache().getQueryService();
-          for (int i = 0; i < qs.length; i++) {
+          for (final String q : qs) {
             try {
-              Query query = queryService.newQuery(qs[i]);
+              Query query = queryService.newQuery(q);
               SelectResults results = (SelectResults) query.execute();
               for (Object o : results.asList()) {
                 if (o instanceof Struct) {
@@ -719,18 +720,18 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
                     if (!(values[c] instanceof PdxInstance)) {
                       fail(
                           "Didn't found expected PdxInstance in the query results. At struct field ["
-                              + c + "] query :" + qs[i] + " Object is: " + values[c]);
+                              + c + "] query :" + q + " Object is: " + values[c]);
                     }
                   }
                 } else {
                   if (!(o instanceof PdxInstance)) {
-                    fail("Didn't found expected PdxInstance in the query results. " + qs[i]
+                    fail("Didn't found expected PdxInstance in the query results. " + q
                         + " Object is: " + o);
                   }
                 }
               }
             } catch (Exception e) {
-              Assert.fail("Failed executing " + qs[i], e);
+              Assert.fail("Failed executing " + q, e);
             }
           }
         } finally {
@@ -739,10 +740,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -781,8 +782,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     });
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -856,7 +857,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed executing " + queryStr, e);
         }
 
-        assertEquals(numberOfEntries, TestObject.numInstance);
+        assertEquals(numberOfEntries, TestObject.numInstance.get());
       }
     };
 
@@ -867,14 +868,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -895,27 +896,27 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         "SELECT pkid FROM " + regName, // 2
         "SELECT * FROM " + regName + " WHERE ID > 5", // 3
         "SELECT p FROM " + regName + " p, p.positions pos WHERE p.pkid != 'vmware'", // 4
-        "SELECT entry.value FROM " + this.regName + ".entries entry WHERE entry.value.ID > 0",
-        "SELECT entry.value FROM  " + this.regName + ".entries entry WHERE entry.key = 'key-1'",
-        "SELECT e.value FROM " + this.regName + ".entrySet e where  e.value.pkid >= '0'",
-        "SELECT * FROM " + this.regName + ".values p WHERE p.pkid in SET('1', '2','3')",
-        "SELECT * FROM " + this.regName + " pf where pf.position1.secId > '2'",
-        "SELECT * FROM " + this.regName + " p where p.position3[1].portfolioId = 2",
-        "SELECT * FROM " + this.regName + " p, p.positions.values AS pos WHERE pos.secId != '1'",
-        "SELECT key, positions FROM " + this.regName + ".entrySet, value.positions.values "
+        "SELECT entry.value FROM " + regName + ".entries entry WHERE entry.value.ID > 0",
+        "SELECT entry.value FROM  " + regName + ".entries entry WHERE entry.key = 'key-1'",
+        "SELECT e.value FROM " + regName + ".entrySet e where  e.value.pkid >= '0'",
+        "SELECT * FROM " + regName + ".values p WHERE p.pkid in SET('1', '2','3')",
+        "SELECT * FROM " + regName + " pf where pf.position1.secId > '2'",
+        "SELECT * FROM " + regName + " p where p.position3[1].portfolioId = 2",
+        "SELECT * FROM " + regName + " p, p.positions.values AS pos WHERE pos.secId != '1'",
+        "SELECT key, positions FROM " + regName + ".entrySet, value.positions.values "
             + "positions WHERE positions.mktValue >= 25.00",
-        "SELECT * FROM " + this.regName + " portfolio1, " + this.regName + " portfolio2 WHERE "
+        "SELECT * FROM " + regName + " portfolio1, " + regName + " portfolio2 WHERE "
             + "portfolio1.status = portfolio2.status",
-        "SELECT portfolio1.ID, portfolio2.status FROM " + this.regName + " portfolio1, "
-            + this.regName + " portfolio2  WHERE portfolio1.status = portfolio2.status",
-        "SELECT * FROM " + this.regName + " portfolio1, portfolio1.positions.values positions1, "
-            + this.regName + " portfolio2,  portfolio2.positions.values positions2 WHERE "
+        "SELECT portfolio1.ID, portfolio2.status FROM " + regName + " portfolio1, "
+            + regName + " portfolio2  WHERE portfolio1.status = portfolio2.status",
+        "SELECT * FROM " + regName + " portfolio1, portfolio1.positions.values positions1, "
+            + regName + " portfolio2,  portfolio2.positions.values positions2 WHERE "
             + "positions1.secId = positions1.secId ",
-        "SELECT * FROM " + this.regName + " portfolio, portfolio.positions.values positions WHERE "
+        "SELECT * FROM " + regName + " portfolio, portfolio.positions.values positions WHERE "
             + "portfolio.Pk IN SET ('1', '2') AND positions.secId = '1'",
-        "SELECT DISTINCT pf1, pf2 FROM " + this.regName
+        "SELECT DISTINCT pf1, pf2 FROM " + regName
             + "  pf1, pf1.collectionHolderMap.values coll1," + " pf1.positions.values posit1, "
-            + this.regName + "  pf2, pf2.collectionHolderMap.values "
+            + regName + "  pf2, pf2.collectionHolderMap.values "
             + " coll2, pf2.positions.values posit2 WHERE pf1.ID = pf2.ID",};
 
 
@@ -940,8 +941,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
 
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -966,7 +967,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           // Load TestObject
           for (int i = 0; i < numberOfEntries; i++) {
             PortfolioPdxVersion portfolioPdxVersion =
-                new PortfolioPdxVersion(new Integer(i), new Integer(i));
+                new PortfolioPdxVersion(i, i);
             PdxInstanceFactory pdxFactory =
                 PdxInstanceFactoryImpl.newCreator("PortfolioPdxVersion", false, getCache());
             PdxInstance pdxInstance = portfolioPdxVersion.createPdxInstance(pdxFactory);
@@ -988,22 +989,22 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed to get QueryService.", e);
         }
 
-        for (int i = 0; i < queryStr.length; i++) {
+        for (final String s : queryStr) {
           try {
-            logger.info("### Executing Query on server:" + queryStr[i]);
-            Query query = remoteQueryService.newQuery(queryStr[i]);
+            logger.info("### Executing Query on server:" + s);
+            Query query = remoteQueryService.newQuery(s);
             rs[0][0] = (SelectResults) query.execute();
-            logger.info("### Executing Query locally:" + queryStr[i]);
-            query = localQueryService.newQuery(queryStr[i]);
+            logger.info("### Executing Query locally:" + s);
+            query = localQueryService.newQuery(s);
             rs[0][1] = (SelectResults) query.execute();
             logger.info("### Remote Query rs size: " + (rs[0][0]).size() + "Local Query rs size: "
                 + (rs[0][1]).size());
             // Compare local and remote query results.
             if (!CacheUtils.compareResultsOfWithAndWithoutIndex(rs)) {
-              fail("Local and Remote Query Results are not matching for query :" + queryStr[i]);
+              fail("Local and Remote Query Results are not matching for query :" + s);
             }
           } catch (Exception e) {
-            Assert.fail("Failed executing " + queryStr[i], e);
+            Assert.fail("Failed executing " + s, e);
           }
 
         }
@@ -1011,10 +1012,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -1061,8 +1062,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     });
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -1149,7 +1150,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           }
 
         }
-        assertEquals(2 * (numberOfEntries + 5), (TestObject.numInstance + TestObject2.numInstance));
+        assertEquals(2 * (numberOfEntries + 5),
+            (TestObject.numInstance.get() + TestObject2.numInstance.get()));
       }
     };
 
@@ -1160,14 +1162,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -1216,7 +1218,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     });
 
     // Client pool.
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -1246,7 +1248,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
             Assert.fail("Failed executing " + queryString[i], e);
           }
         }
-        assertEquals(numberOfEntries, TestObject.numInstance);
+        assertEquals(numberOfEntries, TestObject.numInstance.get());
       }
     });
 
@@ -1254,7 +1256,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm0.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(numberOfEntries, TestObject.numInstance);
+        assertEquals(numberOfEntries, TestObject.numInstance.get());
       }
     });
 
@@ -1263,7 +1265,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
@@ -1272,7 +1274,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm2.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
@@ -1302,7 +1304,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
             }
           }
         }
-        if (TestObject.numInstance <= 0) {
+        if (TestObject.numInstance.get() <= 0) {
           fail("Expected TestObject instance to be >= 0.");
         }
       }
@@ -1313,15 +1315,15 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm2.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -1377,7 +1379,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
             PdxInstanceFactory pdxInstanceFactory =
                 PdxInstanceFactoryImpl.newCreator("PortfolioPdxVersion", false, getCache());
             PortfolioPdxVersion portfolioPdxVersion =
-                new PortfolioPdxVersion(new Integer(i), new Integer(i));
+                new PortfolioPdxVersion(i, i);
             PdxInstance pdxInstance = portfolioPdxVersion.createPdxInstance(pdxInstanceFactory);
             region.put("key-" + i, pdxInstance);
           }
@@ -1406,10 +1408,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -1463,7 +1465,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           // Load TestObject
           for (int i = 0; i < numberOfEntries; i++) {
             PortfolioPdxVersion portfolioPdxVersion =
-                new PortfolioPdxVersion(new Integer(i), new Integer(i));
+                new PortfolioPdxVersion(i, i);
             PdxInstanceFactory pdxInstanceFactory =
                 PdxInstanceFactoryImpl.newCreator("PortfolioPdxVersion", false, getCache());
             PdxInstance pdxInstance = portfolioPdxVersion.createPdxInstance(pdxInstanceFactory);
@@ -1538,10 +1540,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   @Test
@@ -1623,7 +1625,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         } catch (Exception ex) {
           fail("Unable to create index. " + ex.getMessage());
         }
-        assertEquals(numberOfEntries, TestObject.numInstance);
+        assertEquals(numberOfEntries, TestObject.numInstance.get());
       }
     });
 
@@ -1643,13 +1645,13 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         } catch (Exception ex) {
           fail("Unable to create index. " + ex.getMessage());
         }
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -1683,14 +1685,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm0.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(numberOfEntries, TestObject.numInstance);
+        assertEquals(numberOfEntries, TestObject.numInstance.get());
       }
     });
 
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
@@ -1731,7 +1733,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           }
 
         }
-        assertEquals(4 * numberOfEntries, TestObject.numInstance);
+        assertEquals(4 * numberOfEntries, TestObject.numInstance.get());
 
         for (int i = 3; i < queryString.length; i++) {
           try {
@@ -1763,7 +1765,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm0.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(numberOfEntries, TestObject.numInstance);
+        assertEquals(numberOfEntries, TestObject.numInstance.get());
       }
     });
 
@@ -1772,14 +1774,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -1796,10 +1798,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     final int numberOfEntries = 10;
 
     final String[] queries = new String[] {
-        "SELECT entry.value FROM " + this.regName + ".entries entry WHERE entry.value.id > 0",
-        "SELECT entry.value FROM  " + this.regName + ".entries entry WHERE entry.key = 'key-1'",
-        "SELECT e.value FROM " + this.regName + ".entrySet e where  e.value.id >= 0",
-        "SELECT * FROM " + this.regName + ".values p WHERE p.ticker = 'vmware'",};
+        "SELECT entry.value FROM " + regName + ".entries entry WHERE entry.value.id > 0",
+        "SELECT entry.value FROM  " + regName + ".entries entry WHERE entry.key = 'key-1'",
+        "SELECT e.value FROM " + regName + ".entrySet e where  e.value.id >= 0",
+        "SELECT * FROM " + regName + ".values p WHERE p.ticker = 'vmware'",};
 
     // Start server1
     vm0.invoke(new CacheSerializableRunnable("Create cache server") {
@@ -1824,8 +1826,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
 
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -1864,23 +1866,23 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed to get QueryService.", e);
         }
 
-        for (int i = 0; i < queries.length; i++) {
+        for (final String s : queries) {
           try {
-            logger.info("### Executing Query on server:" + queries[i]);
-            Query query = remoteQueryService.newQuery(queries[i]);
+            logger.info("### Executing Query on server:" + s);
+            Query query = remoteQueryService.newQuery(s);
             rs[0][0] = (SelectResults) query.execute();
 
-            logger.info("### Executing Query locally:" + queries[i]);
-            query = localQueryService.newQuery(queries[i]);
+            logger.info("### Executing Query locally:" + s);
+            query = localQueryService.newQuery(s);
             rs[0][1] = (SelectResults) query.execute();
 
             // Compare local and remote query results.
             if (!CacheUtils.compareResultsOfWithAndWithoutIndex(rs)) {
-              fail("Local and Remote Query Results are not matching for query :" + queries[i]);
+              fail("Local and Remote Query Results are not matching for query :" + s);
             }
 
           } catch (Exception e) {
-            Assert.fail("Failed executing " + queries[i], e);
+            Assert.fail("Failed executing " + s, e);
           }
 
         }
@@ -1892,7 +1894,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
@@ -1920,14 +1922,14 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     vm1.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
       public void run2() throws CacheException {
-        assertEquals(0, TestObject.numInstance);
+        assertEquals(0, TestObject.numInstance.get());
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -1944,22 +1946,22 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     final int numberOfEntries = 50;
 
     final String[] queries = new String[] {
-        "SELECT * FROM " + this.regName + " pf where pf.position1.secId > '2'",
-        "SELECT * FROM " + this.regName + " p where p.position3[1].portfolioId = 2",
-        "SELECT * FROM " + this.regName + " p, p.positions.values AS pos WHERE pos.secId != '1'",
-        "SELECT key, positions FROM " + this.regName + ".entrySet, value.positions.values "
+        "SELECT * FROM " + regName + " pf where pf.position1.secId > '2'",
+        "SELECT * FROM " + regName + " p where p.position3[1].portfolioId = 2",
+        "SELECT * FROM " + regName + " p, p.positions.values AS pos WHERE pos.secId != '1'",
+        "SELECT key, positions FROM " + regName + ".entrySet, value.positions.values "
             + "positions WHERE positions.mktValue >= 25.00",
-        "SELECT * FROM " + this.regName + " portfolio1, " + this.regName2 + " portfolio2 WHERE "
+        "SELECT * FROM " + regName + " portfolio1, " + regName2 + " portfolio2 WHERE "
             + "portfolio1.status = portfolio2.status",
-        "SELECT portfolio1.ID, portfolio2.status FROM " + this.regName + " portfolio1, "
-            + this.regName + " portfolio2  WHERE portfolio1.status = portfolio2.status",
-        "SELECT * FROM " + this.regName + " portfolio1, portfolio1.positions.values positions1, "
-            + this.regName + " portfolio2,  portfolio2.positions.values positions2 WHERE "
+        "SELECT portfolio1.ID, portfolio2.status FROM " + regName + " portfolio1, "
+            + regName + " portfolio2  WHERE portfolio1.status = portfolio2.status",
+        "SELECT * FROM " + regName + " portfolio1, portfolio1.positions.values positions1, "
+            + regName + " portfolio2,  portfolio2.positions.values positions2 WHERE "
             + "positions1.secId = positions2.secId ",
-        "SELECT * FROM " + this.regName + " portfolio, portfolio.positions.values positions WHERE "
+        "SELECT * FROM " + regName + " portfolio, portfolio.positions.values positions WHERE "
             + "portfolio.Pk IN SET ('1', '2') AND positions.secId = '1'",
-        "SELECT DISTINCT * FROM " + this.regName + "  pf1, pf1.collectionHolderMap.values coll1,"
-            + " pf1.positions.values posit1, " + this.regName2
+        "SELECT DISTINCT * FROM " + regName + "  pf1, pf1.collectionHolderMap.values coll1,"
+            + " pf1.positions.values posit1, " + regName2
             + "  pf2, pf2.collectionHolderMap.values "
             + " coll2, pf2.positions.values posit2 WHERE posit1.secId='IBM' AND posit2.secId='IBM'",};
 
@@ -1990,8 +1992,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
 
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -2032,23 +2034,23 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed to get QueryService.", e);
         }
 
-        for (int i = 0; i < queries.length; i++) {
+        for (final String s : queries) {
           try {
-            logger.info("### Executing Query on server:" + queries[i]);
-            Query query = remoteQueryService.newQuery(queries[i]);
+            logger.info("### Executing Query on server:" + s);
+            Query query = remoteQueryService.newQuery(s);
             rs[0][0] = (SelectResults) query.execute();
 
-            logger.info("### Executing Query locally:" + queries[i]);
-            query = localQueryService.newQuery(queries[i]);
+            logger.info("### Executing Query locally:" + s);
+            query = localQueryService.newQuery(s);
             rs[0][1] = (SelectResults) query.execute();
 
             // Compare local and remote query results.
             if (!CacheUtils.compareResultsOfWithAndWithoutIndex(rs)) {
-              fail("Local and Remote Query Results are not matching for query :" + queries[i]);
+              fail("Local and Remote Query Results are not matching for query :" + s);
             }
 
           } catch (Exception e) {
-            Assert.fail("Failed executing " + queries[i], e);
+            Assert.fail("Failed executing " + s, e);
           }
 
         }
@@ -2105,10 +2107,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -2125,22 +2127,22 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     final int numberOfEntries = 50;
 
     final String[] queries = new String[] {
-        "SELECT * FROM " + this.regName + " pf where pf.position1.secId > '2'",
-        "SELECT * FROM " + this.regName + " p where p.position3[1].portfolioId = 2",
-        "SELECT * FROM " + this.regName + " p, p.positions.values AS pos WHERE pos.secId != '1'",
-        "SELECT key, positions FROM " + this.regName + ".entrySet, value.positions.values "
+        "SELECT * FROM " + regName + " pf where pf.position1.secId > '2'",
+        "SELECT * FROM " + regName + " p where p.position3[1].portfolioId = 2",
+        "SELECT * FROM " + regName + " p, p.positions.values AS pos WHERE pos.secId != '1'",
+        "SELECT key, positions FROM " + regName + ".entrySet, value.positions.values "
             + "positions WHERE positions.mktValue >= 25.00",
-        "SELECT * FROM " + this.regName + " portfolio1, " + this.regName2 + " portfolio2 WHERE "
+        "SELECT * FROM " + regName + " portfolio1, " + regName2 + " portfolio2 WHERE "
             + "portfolio1.status = portfolio2.status",
-        "SELECT portfolio1.ID, portfolio2.status FROM " + this.regName + " portfolio1, "
-            + this.regName + " portfolio2  WHERE portfolio1.status = portfolio2.status",
-        "SELECT * FROM " + this.regName + " portfolio1, portfolio1.positions.values positions1, "
-            + this.regName + " portfolio2,  portfolio2.positions.values positions2 WHERE "
+        "SELECT portfolio1.ID, portfolio2.status FROM " + regName + " portfolio1, "
+            + regName + " portfolio2  WHERE portfolio1.status = portfolio2.status",
+        "SELECT * FROM " + regName + " portfolio1, portfolio1.positions.values positions1, "
+            + regName + " portfolio2,  portfolio2.positions.values positions2 WHERE "
             + "positions1.secId = positions2.secId ",
-        "SELECT * FROM " + this.regName + " portfolio, portfolio.positions.values positions WHERE "
+        "SELECT * FROM " + regName + " portfolio, portfolio.positions.values positions WHERE "
             + "portfolio.Pk IN SET ('1', '2') AND positions.secId = '1'",
-        "SELECT DISTINCT * FROM " + this.regName + "  pf1, pf1.collectionHolderMap.values coll1,"
-            + " pf1.positions.values posit1, " + this.regName2
+        "SELECT DISTINCT * FROM " + regName + "  pf1, pf1.collectionHolderMap.values coll1,"
+            + " pf1.positions.values posit1, " + regName2
             + "  pf2, pf2.collectionHolderMap.values "
             + " coll2, pf2.positions.values posit2 WHERE posit1.secId='IBM' AND posit2.secId='IBM'",};
 
@@ -2175,8 +2177,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     });
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -2218,23 +2220,23 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed to get QueryService.", e);
         }
 
-        for (int i = 0; i < queries.length; i++) {
+        for (final String s : queries) {
           try {
-            logger.info("### Executing Query on server:" + queries[i]);
-            Query query = remoteQueryService.newQuery(queries[i]);
+            logger.info("### Executing Query on server:" + s);
+            Query query = remoteQueryService.newQuery(s);
             rs[0][0] = (SelectResults) query.execute();
 
-            logger.info("### Executing Query locally:" + queries[i]);
-            query = localQueryService.newQuery(queries[i]);
+            logger.info("### Executing Query locally:" + s);
+            query = localQueryService.newQuery(s);
             rs[0][1] = (SelectResults) query.execute();
 
             // Compare local and remote query results.
             if (!CacheUtils.compareResultsOfWithAndWithoutIndex(rs)) {
-              fail("Local and Remote Query Results are not matching for query :" + queries[i]);
+              fail("Local and Remote Query Results are not matching for query :" + s);
             }
 
           } catch (Exception e) {
-            Assert.fail("Failed executing " + queries[i], e);
+            Assert.fail("Failed executing " + s, e);
           }
 
         }
@@ -2308,10 +2310,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
 
@@ -2329,7 +2331,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     VM vm3 = host.getVM(3);
     final int numberOfEntries = 10;
     final String queryStr =
-        "SELECT DISTINCT * FROM " + this.regName + " pf where pf.ID > 2 and pf.ID < 10";
+        "SELECT DISTINCT * FROM " + regName + " pf where pf.ID > 2 and pf.ID < 10";
     // Start server1
     vm0.invoke(new CacheSerializableRunnable("Create cache server") {
       @Override
@@ -2350,8 +2352,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
 
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -2433,10 +2435,10 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -2451,17 +2453,17 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     VM vm3 = host.getVM(3);
     final int numberOfEntries = 10;
     final String[] queryStr =
-        new String[] {"SELECT * FROM " + this.regName + " pf where pf.getIdValue() > 0", // 0
-            "SELECT * FROM " + this.regName + " pf where pf.test.getId() > 0", // 1
-            "SELECT * FROM " + this.regName + " pf, pf.positions.values pos where "
+        new String[] {"SELECT * FROM " + regName + " pf where pf.getIdValue() > 0", // 0
+            "SELECT * FROM " + regName + " pf where pf.test.getId() > 0", // 1
+            "SELECT * FROM " + regName + " pf, pf.positions.values pos where "
                 + "pos.getSecId() != 'VMWARE'", // 2
-            "SELECT * FROM " + this.regName + " pf, pf.positions.values pos where "
+            "SELECT * FROM " + regName + " pf, pf.positions.values pos where "
                 + "pf.getIdValue() > 0 and pos.getSecId() != 'VMWARE'", // 3
-            "SELECT * FROM " + this.regName + " pf, pf.getPositions('test').values pos where "
+            "SELECT * FROM " + regName + " pf, pf.getPositions('test').values pos where "
                 + "pos.getSecId() != 'VMWARE'", // 4
-            "SELECT * FROM " + this.regName + " pf, pf.getPositions('test').values pos where "
+            "SELECT * FROM " + regName + " pf, pf.getPositions('test').values pos where "
                 + "pf.id > 0 and pos.getSecId() != 'IBM'", // 5
-            "SELECT * FROM " + this.regName + " pf, pf.getPositions('test').values pos where "
+            "SELECT * FROM " + regName + " pf, pf.getPositions('test').values pos where "
                 + "pf.getIdValue() > 0 and pos.secId != 'IBM'", // 6
         };
 
@@ -2516,8 +2518,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
 
 
     // Client pool.
-    final int port0 = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
-    final int port1 = vm1.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port0 = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
+    final int port1 = vm1.invoke(PdxQueryDUnitTest::getCacheServerPort);
 
     final String host0 = NetworkUtils.getServerHostName(vm0.getHost());
 
@@ -2560,22 +2562,22 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       vm1.invoke(new CacheSerializableRunnable("validate") {
         @Override
         public void run2() throws CacheException {
-          assertEquals(testObjectCnt, TestObject.numInstance);
+          assertEquals(testObjectCnt, TestObject.numInstance.get());
           assertEquals(positionObjectCnt, PositionPdx.numInstance);
-          assertEquals(testObjCnt, TestObject2.numInstance);
+          assertEquals(testObjCnt, TestObject2.numInstance.get());
 
           // Reset the instances
-          TestObject.numInstance = 0;
+          TestObject.numInstance.set(0);
           PositionPdx.numInstance = 0;
-          TestObject2.numInstance = 0;
+          TestObject2.numInstance.set(0);
         }
       });
     }
 
-    this.closeClient(vm2);
-    this.closeClient(vm3);
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm2);
+    closeClient(vm3);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -2655,7 +2657,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
     });
 
     // Create client region
-    final int port = vm0.invoke(() -> PdxQueryDUnitTest.getCacheServerPort());
+    final int port = vm0.invoke(PdxQueryDUnitTest::getCacheServerPort);
     final String host0 = NetworkUtils.getServerHostName(vm2.getHost());
     vm3.invoke(new CacheSerializableRunnable("Create region") {
       @Override
@@ -2896,12 +2898,12 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed to get QueryService.", e);
         }
 
-        for (int i = 0; i < qs.length; i++) {
+        for (final String q : qs) {
           try {
-            SelectResults sr = (SelectResults) remoteQueryService.newQuery(qs[i]).execute();
+            SelectResults sr = (SelectResults) remoteQueryService.newQuery(q).execute();
             assertEquals(5, sr.size());
           } catch (Exception e) {
-            Assert.fail("Failed executing " + qs[i], e);
+            Assert.fail("Failed executing " + q, e);
           }
         }
         return null;
@@ -2937,12 +2939,12 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed to get QueryService.", e);
         }
 
-        for (int i = 0; i < qs.length; i++) {
+        for (final String q : qs) {
           try {
-            SelectResults sr = (SelectResults) remoteQueryService.newQuery(qs[i]).execute();
+            SelectResults sr = (SelectResults) remoteQueryService.newQuery(q).execute();
             assertEquals(5, sr.size());
           } catch (Exception e) {
-            Assert.fail("Failed executing " + qs[i], e);
+            Assert.fail("Failed executing " + q, e);
           }
         }
         return null;
@@ -3173,12 +3175,12 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           Assert.fail("Failed to get QueryService.", e);
         }
 
-        for (int i = 0; i < qs.length; i++) {
+        for (final String q : qs) {
           try {
-            SelectResults sr = (SelectResults) remoteQueryService.newQuery(qs[i]).execute();
+            SelectResults sr = (SelectResults) remoteQueryService.newQuery(q).execute();
             assertEquals(5, sr.size());
           } catch (Exception e) {
-            Assert.fail("Failed executing " + qs[i], e);
+            Assert.fail("Failed executing " + q, e);
           }
         }
         return null;
@@ -3268,7 +3270,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           PdxInstance pdxInstance = pdxFactory.create();
           region.put("key-" + i, pdxInstance);
 
-        } ;
+        }
         // Load version 2 objects
         for (int i = numberOfEntries; i < numberOfEntries * 2; i++) {
           PdxInstanceFactory pdxFactory = cache.createPdxInstanceFactory("PdxPortfolio");
@@ -3316,7 +3318,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         // check if the types registered on server are fetched by the client
         TypeRegistration registration = getCache().getPdxRegistry().getTypeRegistration();
         assertTrue(registration instanceof ClientTypeRegistration);
-        Map<Integer, PdxType> m = ((ClientTypeRegistration) registration).types();
+        Map<Integer, PdxType> m = registration.types();
         assertEquals(2, m.size());
         for (PdxType type : m.values()) {
           assertEquals("PdxPortfolio", type.getClassName());
@@ -3324,7 +3326,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
         return null;
       }
     });
-    Invoke.invokeInEveryVM("Disconnecting from the Distributed system", () -> disconnectFromDS());
+    Invoke.invokeInEveryVM("Disconnecting from the Distributed system",
+        JUnit4DistributedTestCase::disconnectFromDS);
   }
 
   /**
@@ -3461,7 +3464,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           PdxInstanceFactory pdxInstanceFactory =
               PdxInstanceFactoryImpl.newCreator("PdxVersionedFieldType", false, getCache());
           pdxInstanceFactory.writeString("stringField", "" + i);
-          pdxInstanceFactory.writeBoolean("booleanField", (i % 2 == 0 ? true : false));
+          pdxInstanceFactory.writeBoolean("booleanField", (i % 2 == 0));
           pdxInstanceFactory.writeChar("charField", ((char) i));
           pdxInstanceFactory.writeShort("shortField", new Integer(i).shortValue());
           PdxInstance pdxInstance = pdxInstanceFactory.create();
@@ -3549,7 +3552,7 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
           PdxInstanceFactory pdxInstanceFactory =
               PdxInstanceFactoryImpl.newCreator("PdxVersionedFieldType", false, getCache());
           pdxInstanceFactory.writeString("stringField", "" + i);
-          pdxInstanceFactory.writeBoolean("booleanField", (i % 2 == 0 ? true : false));
+          pdxInstanceFactory.writeBoolean("booleanField", (i % 2 == 0));
           pdxInstanceFactory.writeChar("charField", ((char) i));
           pdxInstanceFactory.writeShort("shortField", new Integer(i).shortValue());
           PdxInstance pdxInstance = pdxInstanceFactory.create();
@@ -3655,8 +3658,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -3711,8 +3714,8 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       }
     });
 
-    this.closeClient(vm1);
-    this.closeClient(vm0);
+    closeClient(vm1);
+    closeClient(vm0);
   }
 
   /**
@@ -3760,9 +3763,9 @@ public class PdxQueryDUnitTest extends PDXQueryTestBase {
       assertEquals(0, selectResults.asList().size());
     });
 
-    this.closeClient(vm0);
-    this.closeClient(vm1);
-    this.closeClient(vm2);
+    closeClient(vm0);
+    closeClient(vm1);
+    closeClient(vm2);
   }
 
 }

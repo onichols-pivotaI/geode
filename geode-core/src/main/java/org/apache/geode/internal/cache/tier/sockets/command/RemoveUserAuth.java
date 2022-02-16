@@ -16,6 +16,8 @@ package org.apache.geode.internal.cache.tier.sockets.command;
 
 import java.io.IOException;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.internal.cache.tier.Command;
 import org.apache.geode.internal.cache.tier.sockets.BaseCommand;
@@ -35,8 +37,9 @@ public class RemoveUserAuth extends BaseCommand {
   }
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start)
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start)
       throws IOException, ClassNotFoundException, InterruptedException {
     boolean isSecureMode = clientMessage.isSecureMode();
 
@@ -49,7 +52,7 @@ public class RemoveUserAuth extends BaseCommand {
       serverConnection.setAsTrue(REQUIRES_RESPONSE);
       Part keepalivePart = clientMessage.getPart(0);
       byte[] keepaliveByte = keepalivePart.getSerializedForm();
-      boolean keepalive = (keepaliveByte == null || keepaliveByte[0] == 0) ? false : true;
+      boolean keepalive = keepaliveByte != null && keepaliveByte[0] != 0;
       serverConnection.getSecurityLogWriter().fine("remove user auth keep alive " + keepalive);
       serverConnection.removeUserAuth(clientMessage, keepalive);
       writeReply(clientMessage, serverConnection);

@@ -15,10 +15,10 @@
 package org.apache.geode.cache.wan.internal.client.locator;
 
 import java.net.SocketTimeoutException;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.InternalGemFireError;
 import org.apache.geode.cache.client.ServerOperationException;
@@ -86,8 +86,8 @@ public class GatewaySenderBatchOp {
       getMessage().addIntPart(dsId);
       getMessage().addBytesPart(new byte[] {removeFromQueueOnException ? (byte) 1 : (byte) 0});
       // Add each event
-      for (Iterator i = events.iterator(); i.hasNext();) {
-        GatewaySenderEventImpl event = (GatewaySenderEventImpl) i.next();
+      for (final Object o : events) {
+        GatewaySenderEventImpl event = (GatewaySenderEventImpl) o;
         // Add action
         int action = event.getAction();
         getMessage().addIntPart(action);
@@ -95,10 +95,12 @@ public class GatewaySenderBatchOp {
           byte posDupByte = (byte) (event.getPossibleDuplicate() ? 0x01 : 0x00);
           getMessage().addBytesPart(new byte[] {posDupByte});
         }
-        if (action >= 0 && action <= 3) {
+        if (action >= 0 && action <= GatewaySenderEventImpl.UPDATE_ACTION_NO_GENERATE_CALLBACKS) {
           // 0 = create
           // 1 = update
           // 2 = destroy
+          // 3 = update timestamp
+          // 4 = update passing generatecallbacks
           String regionName = event.getRegionPath();
           EventID eventId = event.getEventId();
           Object key = event.getKey();
@@ -110,9 +112,9 @@ public class GatewaySenderBatchOp {
           getMessage().addObjPart(eventId);
           // Add key
           getMessage().addStringOrObjPart(key);
-          if (action < 2 /* it is 0 or 1 */) {
+          if (action < 2 || action == GatewaySenderEventImpl.UPDATE_ACTION_NO_GENERATE_CALLBACKS) {
             byte[] value = event.getSerializedValue();
-            byte valueIsObject = event.getValueIsObject();;
+            byte valueIsObject = event.getValueIsObject();
             // Add value (which is already a serialized byte[])
             getMessage().addRawPart(value, (valueIsObject == 0x01));
           }
@@ -137,31 +139,31 @@ public class GatewaySenderBatchOp {
       if (getMessage().getNumberOfParts() == 0) {
         return attemptRead(cnx);
       }
-      this.failed = true;
-      this.timedOut = false;
+      failed = true;
+      timedOut = false;
       long start = startAttempt(cnx.getStats());
       try {
         try {
           attemptSend(cnx);
-          this.failed = false;
+          failed = false;
         } finally {
           endSendAttempt(cnx.getStats(), start);
         }
       } finally {
         endAttempt(cnx.getStats(), start);
       }
-      return this.failed;
+      return failed;
     }
 
     private Object attemptRead(Connection cnx) throws Exception {
-      this.failed = true;
+      failed = true;
       try {
         Object result = attemptReadResponse(cnx);
-        this.failed = false;
+        failed = false;
         return result;
       } catch (SocketTimeoutException ste) {
-        this.failed = false;
-        this.timedOut = true;
+        failed = false;
+        timedOut = true;
         throw ste;
       }
     }
@@ -176,39 +178,36 @@ public class GatewaySenderBatchOp {
      * @throws Exception if the execute failed
      */
     @Override
-    protected Object attemptReadResponse(Connection cnx) throws Exception {
-      Message msg = createResponseMessage();
-      if (msg != null) {
-        msg.setComms(cnx.getSocket(), cnx.getInputStream(), cnx.getOutputStream(),
-            ((ConnectionImpl) cnx).getCommBufferForAsyncRead(), cnx.getStats());
-        if (msg instanceof ChunkedMessage) {
-          try {
-            return processResponse(msg, cnx);
-          } finally {
-            msg.unsetComms();
-            // TODO (ashetkar) Handle the case when we fail to read the
-            // connection id.
-            processSecureBytes(cnx, msg);
-          }
-        }
-
+    protected Object attemptReadResponse(@NotNull Connection cnx) throws Exception {
+      final Message msg = createResponseMessage();
+      msg.setComms(cnx.getSocket(), cnx.getInputStream(), cnx.getOutputStream(),
+          ((ConnectionImpl) cnx).getCommBufferForAsyncRead(), cnx.getStats());
+      if (msg instanceof ChunkedMessage) {
         try {
-          msg.receive();
+          return processResponse(msg, cnx);
         } finally {
           msg.unsetComms();
+          // TODO (ashetkar) Handle the case when we fail to read the
+          // connection id.
           processSecureBytes(cnx, msg);
         }
-        return processResponse(msg, cnx);
       }
 
-      return null;
+      try {
+        msg.receive();
+      } finally {
+        msg.unsetComms();
+        processSecureBytes(cnx, msg);
+      }
+      return processResponse(msg, cnx);
+
     }
 
 
     private static int calcPartCount(List events) {
       int numberOfParts = 4; // for the number of events and the batchId
-      for (Iterator i = events.iterator(); i.hasNext();) {
-        GatewaySenderEventImpl event = (GatewaySenderEventImpl) i.next();
+      for (final Object o : events) {
+        GatewaySenderEventImpl event = (GatewaySenderEventImpl) o;
         numberOfParts += event.getNumberOfParts();
       }
       return numberOfParts;
@@ -226,7 +225,7 @@ public class GatewaySenderBatchOp {
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       GatewayAck ack = null;
       try {
         // Read the header which describes the type of message following
@@ -265,7 +264,7 @@ public class GatewaySenderBatchOp {
             break;
           default:
             throw new InternalGemFireError(String.format("Unknown message type %s",
-                Integer.valueOf(msg.getMessageType())));
+                msg.getMessageType()));
         }
       } finally {
         msg.clear();

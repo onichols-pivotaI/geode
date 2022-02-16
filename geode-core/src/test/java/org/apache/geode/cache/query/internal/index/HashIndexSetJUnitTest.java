@@ -18,7 +18,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -47,7 +47,7 @@ public class HashIndexSetJUnitTest {
   private void setupHashIndexSet(int numEntries) {
     his = createHashIndexSet();
     portfoliosMap = createPortfolioObjects(numEntries, 0);
-    portfolioSet = new HashSet<Portfolio>(portfoliosMap.values());
+    portfolioSet = new HashSet<>(portfoliosMap.values());
     addPortfoliosToHashIndexSet(portfoliosMap, his);
   }
 
@@ -183,9 +183,9 @@ public class HashIndexSetJUnitTest {
     int numEntries = 20;
     int keyToLookup = 1;
     his = createHashIndexSet();
-    Map<Integer, Portfolio> collectionOfPorts1 = this.createPortfolioObjects(numEntries, 0);
+    Map<Integer, Portfolio> collectionOfPorts1 = createPortfolioObjects(numEntries, 0);
     Map<Integer, Portfolio> collectionOfPorts2 =
-        this.createPortfolioObjects(numEntries, numEntries);
+        createPortfolioObjects(numEntries, numEntries);
 
     addPortfoliosToHashIndexSet(collectionOfPorts1, his);
     addPortfoliosToHashIndexSet(collectionOfPorts2, his);
@@ -206,11 +206,11 @@ public class HashIndexSetJUnitTest {
     int numEntries = 20;
     int keyToLookup = 1;
     his = createHashIndexSet();
-    Map<Integer, Portfolio> collectionOfPorts1 = this.createPortfolioObjects(numEntries, 0);
+    Map<Integer, Portfolio> collectionOfPorts1 = createPortfolioObjects(numEntries, 0);
     Map<Integer, Portfolio> collectionOfPorts2 =
-        this.createPortfolioObjects(numEntries, numEntries);
+        createPortfolioObjects(numEntries, numEntries);
     Map<Integer, Portfolio> collectionOfPorts3 =
-        this.createPortfolioObjects(numEntries, numEntries * 2);
+        createPortfolioObjects(numEntries, numEntries * 2);
 
     addPortfoliosToHashIndexSet(collectionOfPorts1, his);
     addPortfoliosToHashIndexSet(collectionOfPorts2, his);
@@ -255,9 +255,9 @@ public class HashIndexSetJUnitTest {
   public void testGetAllNotMatching() throws Exception {
     int numEntries = 20;
     his = createHashIndexSet();
-    Map<Integer, Portfolio> collectionOfPorts1 = this.createPortfolioObjects(numEntries, 0);
+    Map<Integer, Portfolio> collectionOfPorts1 = createPortfolioObjects(numEntries, 0);
     Map<Integer, Portfolio> collectionOfPorts2 =
-        this.createPortfolioObjects(numEntries, numEntries);
+        createPortfolioObjects(numEntries, numEntries);
 
     addPortfoliosToHashIndexSet(collectionOfPorts1, his);
     addPortfoliosToHashIndexSet(collectionOfPorts2, his);
@@ -335,7 +335,7 @@ public class HashIndexSetJUnitTest {
   @Test
   public void testIndexWhenObjectNotInSetWhenPopulated() {
     int numEntries = 10;
-    this.setupHashIndexSet(numEntries);
+    setupHashIndexSet(numEntries);
     assertEquals(-1, his.index(new Portfolio(numEntries + 1)));
   }
 
@@ -423,7 +423,7 @@ public class HashIndexSetJUnitTest {
     });
     assertEquals(numEntries, his.size());
     his.retainAll(subset);
-    his.iterator().forEachRemaining((e -> subset.remove(e)));
+    his.iterator().forEachRemaining((subset::remove));
     assertTrue(subset.isEmpty());
     assertEquals(numEntries / 2, his.size());
   }

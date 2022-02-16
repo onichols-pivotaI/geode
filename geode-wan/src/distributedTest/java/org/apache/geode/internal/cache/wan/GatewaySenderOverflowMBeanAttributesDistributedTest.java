@@ -19,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Set;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -35,9 +34,10 @@ import org.apache.geode.internal.cache.wan.parallel.ParallelGatewaySenderQueue;
 import org.apache.geode.management.GatewaySenderMXBean;
 import org.apache.geode.management.ManagementService;
 import org.apache.geode.test.junit.categories.WanTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category({WanTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class GatewaySenderOverflowMBeanAttributesDistributedTest extends WANTestBase {
 
   @Test
@@ -83,7 +83,7 @@ public class GatewaySenderOverflowMBeanAttributesDistributedTest extends WANTest
 
     // Start a gateway receiver with partitioned region
     vm2.invoke(() -> createCache(nyPort));
-    vm2.invoke(() -> createReceiver());
+    vm2.invoke(WANTestBase::createReceiver);
     vm2.invoke(() -> createPartitionedRegion(getTestMethodName(), null, 1, 100, isOffHeap()));
 
     // Resume gateway sender
@@ -141,7 +141,7 @@ public class GatewaySenderOverflowMBeanAttributesDistributedTest extends WANTest
 
     // Start a gateway receiver with partitioned region
     vm2.invoke(() -> createCache(nyPort));
-    vm2.invoke(() -> createReceiver());
+    vm2.invoke(WANTestBase::createReceiver);
     vm2.invoke(() -> createPartitionedRegion(getTestMethodName(), null, 1, 100, isOffHeap()));
 
     // Resume the gateway sender

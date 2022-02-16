@@ -15,6 +15,8 @@
 
 package org.apache.geode.management.internal.beans;
 
+import static java.lang.System.lineSeparator;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -22,6 +24,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -56,7 +59,7 @@ public class BeanUtilFuncs {
     long seekPosition = fileLength - readSize;
     StringBuilder returnStr = new StringBuilder();
     StringBuilder workingString = new StringBuilder();
-    String separator = System.getProperty("line.separator");
+    String separator = lineSeparator();
 
     while (linesRead < numLines) {
 
@@ -316,7 +319,7 @@ public class BeanUtilFuncs {
     }
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     GZIPOutputStream gzip = new GZIPOutputStream(out);
-    gzip.write(str.getBytes("UTF-8"));
+    gzip.write(str.getBytes(StandardCharsets.UTF_8));
     gzip.close();
     byte[] outBytes = out.toByteArray();
     return outBytes;
@@ -331,7 +334,7 @@ public class BeanUtilFuncs {
       return null;
     }
     GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(bytes));
-    BufferedReader bf = new BufferedReader(new InputStreamReader(gis, "UTF-8"));
+    BufferedReader bf = new BufferedReader(new InputStreamReader(gis, StandardCharsets.UTF_8));
     String outStr = "";
     String line;
     while ((line = bf.readLine()) != null) {

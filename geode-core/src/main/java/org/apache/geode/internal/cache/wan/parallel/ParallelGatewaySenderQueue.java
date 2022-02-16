@@ -16,13 +16,11 @@ package org.apache.geode.internal.cache.wan.parallel;
 
 import static org.apache.geode.cache.Region.SEPARATOR;
 import static org.apache.geode.cache.wan.GatewaySender.DEFAULT_BATCH_SIZE;
-import static org.apache.geode.cache.wan.GatewaySender.GET_TRANSACTION_EVENTS_FROM_QUEUE_RETRIES;
 import static org.apache.geode.cache.wan.GatewaySender.GET_TRANSACTION_EVENTS_FROM_QUEUE_WAIT_TIME_MS;
 import static org.apache.geode.internal.cache.LocalRegion.InitializationLevel.BEFORE_INITIAL_IMAGE;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -89,7 +87,6 @@ import org.apache.geode.internal.cache.wan.GatewaySenderConfigurationException;
 import org.apache.geode.internal.cache.wan.GatewaySenderEventImpl;
 import org.apache.geode.internal.cache.wan.GatewaySenderException;
 import org.apache.geode.internal.cache.wan.GatewaySenderStats;
-import org.apache.geode.internal.cache.wan.InternalGatewayQueueEvent;
 import org.apache.geode.internal.size.SingleObjectSizer;
 import org.apache.geode.internal.statistics.StatisticsClock;
 import org.apache.geode.internal.util.concurrent.StoppableCondition;
@@ -108,7 +105,8 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
       SEPARATOR + PartitionedRegionHelper.PR_ROOT_REGION_NAME + SEPARATOR;
 
   // <PartitionedRegion, Map<Integer, List<Object>>>
-  private final Map regionToDispatchedKeysMap = new ConcurrentHashMap();
+  private final Map<String, Map<Integer, List<Object>>> regionToDispatchedKeysMap =
+      new ConcurrentHashMap<String, Map<Integer, List<Object>>>();
 
   protected final StoppableReentrantLock buckToDispatchLock;
   private final StoppableCondition regionToDispatchedKeysMapEmpty;
@@ -130,7 +128,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
    * false signal. However, make sure that whatever scenario can cause an entry to be peeked shoudld
    * signal the processor to unblock.
    */
-  private StoppableCondition queueEmptyCondition;
+  private final StoppableCondition queueEmptyCondition;
 
   protected final GatewaySenderStats stats;
 
@@ -142,7 +140,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
    * available locally.
    */
   private final ConcurrentMap<Integer, BlockingQueue<GatewaySenderEventImpl>> bucketToTempQueueMap =
-      new ConcurrentHashMap<Integer, BlockingQueue<GatewaySenderEventImpl>>();
+      new ConcurrentHashMap<>();
 
   /**
    * The default frequency (in milliseconds) at which a message will be sent by the primary to all
@@ -158,14 +156,14 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   private BatchRemovalThread removalThread = null;
 
   protected BlockingQueue<GatewaySenderEventImpl> peekedEvents =
-      new LinkedBlockingQueue<GatewaySenderEventImpl>();
+      new LinkedBlockingQueue<>();
 
   /**
    * The peekedEventsProcessing queue is used when the batch size is reduced due to a
    * MessageTooLargeException
    */
-  private BlockingQueue<GatewaySenderEventImpl> peekedEventsProcessing =
-      new LinkedBlockingQueue<GatewaySenderEventImpl>();
+  private final BlockingQueue<GatewaySenderEventImpl> peekedEventsProcessing =
+      new LinkedBlockingQueue<>();
 
   /**
    * The peekedEventsProcessingInProgress boolean denotes that processing existing peeked events is
@@ -200,8 +198,8 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
     public ConflationHandler(Conflatable conflatableObject, int bId, Long previousTailKey) {
       this.conflatableObject = conflatableObject;
-      this.previousTailKeyTobeRemoved = previousTailKey;
-      this.bucketId = bId;
+      previousTailKeyTobeRemoved = previousTailKey;
+      bucketId = bId;
     }
 
     @Override
@@ -244,50 +242,42 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   protected final int nDispatcher;
 
-  private MetaRegionFactory metaRegionFactory;
+  private final MetaRegionFactory metaRegionFactory;
 
-  public ParallelGatewaySenderQueue(AbstractGatewaySender sender, Set<Region> userRegions, int idx,
+  public ParallelGatewaySenderQueue(AbstractGatewaySender sender, Set<Region<?, ?>> userRegions,
+      int idx,
       int nDispatcher, boolean cleanQueues) {
     this(sender, userRegions, idx, nDispatcher, new MetaRegionFactory(), cleanQueues);
   }
 
-  ParallelGatewaySenderQueue(AbstractGatewaySender sender, Set<Region> userRegions, int idx,
+  ParallelGatewaySenderQueue(AbstractGatewaySender sender, Set<Region<?, ?>> userRegions, int idx,
       int nDispatcher, MetaRegionFactory metaRegionFactory, boolean cleanQueues) {
 
     this.metaRegionFactory = metaRegionFactory;
 
     this.cleanQueues = cleanQueues;
 
-    this.index = idx;
+    index = idx;
     this.nDispatcher = nDispatcher;
-    this.stats = sender.getStatistics();
+    stats = sender.getStatistics();
     this.sender = sender;
 
-    if (this.sender.getId().contains(AsyncEventQueueImpl.ASYNC_EVENT_QUEUE_PREFIX)) {
-      this.asyncEvent = true;
-    } else {
-      this.asyncEvent = false;
-    }
+    asyncEvent = this.sender.getId().contains(AsyncEventQueueImpl.ASYNC_EVENT_QUEUE_PREFIX);
 
-    List<Region> listOfRegions = new ArrayList<Region>(userRegions);
-    Collections.sort(listOfRegions, new Comparator<Region>() {
-      @Override
-      public int compare(Region o1, Region o2) {
-        return o1.getFullPath().compareTo(o2.getFullPath());
-      }
-    });
+    List<Region> listOfRegions = new ArrayList<>(userRegions);
+    Collections.sort(listOfRegions, (o1, o2) -> o1.getFullPath().compareTo(o2.getFullPath()));
 
     for (Region userRegion : listOfRegions) {
       if (userRegion instanceof PartitionedRegion) {
         addShadowPartitionedRegionForUserPR((PartitionedRegion) userRegion);
         if (index == 0 && getRegion(userRegion.getFullPath()) != null) {
-          this.stats.incQueueSize(getRegion(userRegion.getFullPath()).getLocalSize());
+          stats.incQueueSize(getRegion(userRegion.getFullPath()).getLocalSize());
         }
       } else {
         // Fix for Bug#51491. Once decided to support this configuration we have call
         // addShadowPartitionedRegionForUserRR
 
-        if (this.asyncEvent) {
+        if (asyncEvent) {
           throw new AsyncEventQueueConfigurationException(String.format(
               "Parallel Async Event Queue %s can not be used with replicated region %s",
               AsyncEventQueueImpl.getAsyncEventQueueIdFromSenderId(this.sender.getId()),
@@ -317,14 +307,14 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     // still, it is safer approach to synchronize it
     synchronized (ParallelGatewaySenderQueue.class) {
       if (removalThread == null) {
-        removalThread = new BatchRemovalThread(this.sender.getCache(), this);
+        removalThread = new BatchRemovalThread(sender.getCache(), this);
         removalThread.start();
       }
     }
   }
 
   public void addShadowPartitionedRegionForUserRR(DistributedRegion userRegion) {
-    this.sender.getLifeCycleLock().writeLock().lock();
+    sender.getLifeCycleLock().writeLock().lock();
     PartitionedRegion prQ = null;
 
     if (logger.isDebugEnabled()) {
@@ -336,7 +326,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     try {
       String regionName = userRegion.getFullPath();
 
-      if (this.userRegionNameToShadowPRMap.containsKey(regionName)) {
+      if (userRegionNameToShadowPRMap.containsKey(regionName)) {
         return;
       }
 
@@ -405,9 +395,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         // and primary nodes have been decided.
         // This is required in case of persistent PR and sender.
         if (prQ.getLocalMaxMemory() != 0) {
-          Iterator<Integer> itr = prQ.getRegionAdvisor().getBucketSet().iterator();
-          while (itr.hasNext()) {
-            itr.next();
+          for (final Integer integer : prQ.getRegionAdvisor().getBucketSet()) {
           }
         }
         // In case of Replicated Region it may not be necessary.
@@ -418,8 +406,8 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
       } else {
         // in case shadowPR exists already (can be possible when sender is
         // started from stop operation)
-        if (this.index == 0) // HItesh: for first processor only
-        {
+        // for first processor only
+        if (index == 0) {
           handleShadowPRExistsScenario(cache, prQ);
         }
       }
@@ -429,14 +417,14 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
        * already exists and sender is started later, the enqueueTempEvents is done in the start()
        * method of ParallelGatewaySender
        */
-      if ((this.index == this.nDispatcher - 1) && this.sender.isRunning()) {
-        ((AbstractGatewaySender) sender).enqueueTempEvents();
+      if ((index == nDispatcher - 1) && sender.isRunning()) {
+        sender.enqueueTempEvents();
       }
     } finally {
       if (prQ != null) {
-        this.userRegionNameToShadowPRMap.put(userRegion.getFullPath(), prQ);
+        userRegionNameToShadowPRMap.put(userRegion.getFullPath(), prQ);
       }
-      this.sender.getLifeCycleLock().writeLock().unlock();
+      sender.getLifeCycleLock().writeLock().unlock();
     }
   }
 
@@ -455,7 +443,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
           "{} addShadowPartitionedRegionForUserPR: Attempting to create queue region: {}; child region: {}",
           this, userPR.getDisplayName(), childPR == null ? "null" : childPR.getDisplayName());
     }
-    this.sender.getLifeCycleLock().writeLock().lock();
+    sender.getLifeCycleLock().writeLock().lock();
 
     PartitionedRegion prQ = null;
     try {
@@ -468,13 +456,13 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         // to leader PR)
         // though, internally, colocate the GatewaySender's shadowPR with the leader PR in
         // colocation chain
-        if (!this.userRegionNameToShadowPRMap.containsKey(leaderRegionName)) {
+        if (!userRegionNameToShadowPRMap.containsKey(leaderRegionName)) {
           addShadowPartitionedRegionForUserPR(ColocationHelper.getLeaderRegion(userPR), userPR);
         }
         return;
       }
 
-      if (this.userRegionNameToShadowPRMap.containsKey(regionName)) {
+      if (userRegionNameToShadowPRMap.containsKey(regionName)) {
         return;
       }
 
@@ -483,16 +471,31 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         throw new GatewaySenderException(
             String.format(
                 "Non persistent gateway sender %s can not be attached to persistent region %s",
-                new Object[] {this.sender.getId(), userPR.getFullPath()}));
+                sender.getId(), userPR.getFullPath()));
       }
 
       InternalCache cache = sender.getCache();
       boolean isAccessor = (userPR.getLocalMaxMemory() == 0);
 
       final String prQName = sender.getId() + QSTRING + convertPathToName(userPR.getFullPath());
-      prQ = (PartitionedRegion) cache.getRegion(prQName);
 
-      if ((prQ != null) && (this.index == 0) && this.cleanQueues) {
+      prQ = (PartitionedRegion) cache.getRegion(prQName, true);
+      if (prQ != null && prQ.isDestroyed()) {
+        PartitionedRegion oldPrQ = prQ;
+        while (oldPrQ == prQ) {
+          try {
+            Thread.sleep(50);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+          if (logger.isDebugEnabled()) {
+            logger.debug("wait for destroy to finish");
+          }
+          prQ = (PartitionedRegion) cache.getRegion(prQName, true);
+        }
+      }
+
+      if ((prQ != null) && (index == 0) && cleanQueues) {
         cleanOverflowStats(cache);
         prQ.destroyRegion(null);
         prQ = null;
@@ -567,10 +570,8 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         // Add the overflow statistics to the mbean
         addOverflowStatisticsToMBean(cache, prQ);
 
-        if (!this.cleanQueues) {
-          // Wait for buckets to be recovered.
-          prQ.shadowPRWaitForBucketRecovery();
-        }
+        // Wait for buckets to be recovered.
+        prQ.shadowPRWaitForBucketRecovery();
 
         if (logger.isDebugEnabled()) {
           logger.debug("{}: Created queue region: {}", this, prQ);
@@ -582,8 +583,8 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         }
         // in case shadowPR exists already (can be possible when sender is
         // started from stop operation)
-        if (this.index == 0) // HItesh:for first parallelGatewaySenderQueue only
-        {
+        // for first parallelGatewaySenderQueue only
+        if (index == 0) {
           handleShadowPRExistsScenario(cache, prQ);
         }
 
@@ -591,7 +592,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
     } finally {
       if (prQ != null) {
-        this.userRegionNameToShadowPRMap.put(userPR.getFullPath(), prQ);
+        userRegionNameToShadowPRMap.put(userPR.getFullPath(), prQ);
       }
       /*
        * Here, enqueueTempEvents need to be invoked when a sender is already running and userPR is
@@ -599,20 +600,20 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
        * already exists and sender is started later, the enqueueTempEvents is done in the start()
        * method of ParallelGatewaySender
        */
-      if ((this.index == this.nDispatcher - 1) && this.sender.isRunning()) {
-        ((AbstractGatewaySender) sender).enqueueTempEvents();
+      if ((index == nDispatcher - 1) && sender.isRunning()) {
+        sender.enqueueTempEvents();
       }
       afterRegionAdd(userPR);
-      this.sender.getLifeCycleLock().writeLock().unlock();
+      sender.getLifeCycleLock().writeLock().unlock();
     }
   }
 
   private void addOverflowStatisticsToMBean(Cache cache, PartitionedRegion prQ) {
     // Get the appropriate mbean and add the eviction and disk region stats to it
     ManagementService service = ManagementService.getManagementService(cache);
-    if (this.asyncEvent) {
+    if (asyncEvent) {
       AsyncEventQueueMBean bean = (AsyncEventQueueMBean) service.getLocalAsyncEventQueueMXBean(
-          AsyncEventQueueImpl.getAsyncEventQueueIdFromSenderId(this.sender.getId()));
+          AsyncEventQueueImpl.getAsyncEventQueueIdFromSenderId(sender.getId()));
 
       if (bean != null) {
         // Add the eviction stats
@@ -623,7 +624,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
       }
     } else {
       GatewaySenderMBean bean =
-          (GatewaySenderMBean) service.getLocalGatewaySenderMXBean(this.sender.getId());
+          (GatewaySenderMBean) service.getLocalGatewaySenderMXBean(sender.getId());
 
       if (bean != null) {
         // Add the eviction stats
@@ -637,9 +638,9 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   private void cleanOverflowStats(Cache cache) {
     ManagementService service = ManagementService.getManagementService(cache);
-    if (!this.asyncEvent) {
+    if (!asyncEvent) {
       GatewaySenderMBean bean =
-          (GatewaySenderMBean) service.getLocalGatewaySenderMXBean(this.sender.getId());
+          (GatewaySenderMBean) service.getLocalGatewaySenderMXBean(sender.getId());
       if (bean != null) {
         bean.getBridge().clearOverflowStatistics();
       }
@@ -712,16 +713,44 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
     boolean isDREvent = isDREvent(sender.getCache(), value);
 
-    String regionPath = getRegionPathForEventAndType(value, isDREvent);
-    if (regionPath == null) {
+    String regionPath = value.getRegionPath();
+    if (!isDREvent) {
+      Region region = sender.getCache().getRegion(regionPath, true);
+      regionPath = ColocationHelper.getLeaderRegion((PartitionedRegion) region).getFullPath();
+    }
+    if (isDebugEnabled) {
+      logger.debug("Put is for the region {}", regionPath);
+    }
+    if (!userRegionNameToShadowPRMap.containsKey(regionPath)) {
+      if (isDebugEnabled) {
+        logger.debug("The userRegionNameToshadowPRMap is {}", userRegionNameToShadowPRMap);
+      }
+      logger.warn(
+          "GatewaySender: Not queuing the event {}, as the region for which this event originated is not yet configured in the GatewaySender",
+          value);
+      // does not put into queue
       return false;
     }
 
-    PartitionedRegion prQ = this.userRegionNameToShadowPRMap.get(regionPath);
+    PartitionedRegion prQ = userRegionNameToShadowPRMap.get(regionPath);
     int bucketId = value.getBucketId();
-    Object key = getKeyForEventAndType(value, isDREvent);
-    if (key == null) {
-      return false;
+    Object key = null;
+    if (!isDREvent) {
+      key = value.getShadowKey();
+
+      if ((Long) key == -1) {
+        // In case of parallel we don't expect
+        // the key to be not set. If it is the case then the event must be coming
+        // through listener, so return.
+        if (isDebugEnabled) {
+          logger.debug("ParallelGatewaySenderOrderedQueue not putting key {} : Value : {}", key,
+              value);
+        }
+        // does not put into queue
+        return false;
+      }
+    } else {
+      key = value.getEventId();
     }
 
     if (isDebugEnabled) {
@@ -784,11 +813,11 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
                * cache but we know that it will be created.
                */
               BlockingQueue tempQueue = null;
-              synchronized (this.bucketToTempQueueMap) {
-                tempQueue = this.bucketToTempQueueMap.get(bucketId);
+              synchronized (bucketToTempQueueMap) {
+                tempQueue = bucketToTempQueueMap.get(bucketId);
                 if (tempQueue == null) {
                   tempQueue = new LinkedBlockingQueue();
-                  this.bucketToTempQueueMap.put(bucketId, tempQueue);
+                  bucketToTempQueueMap.put(bucketId, tempQueue);
                 }
               }
 
@@ -853,49 +882,6 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     return putDone;
   }
 
-  private String getRegionPathForEventAndType(GatewaySenderEventImpl event, boolean isDREvent) {
-    boolean isDebugEnabled = logger.isDebugEnabled();
-    String regionPath = event.getRegionPath();
-    if (!isDREvent) {
-      PartitionedRegion region = (PartitionedRegion) sender.getCache().getRegion(regionPath, true);
-      regionPath = ColocationHelper.getLeaderRegion(region).getFullPath();
-    }
-    if (isDebugEnabled) {
-      logger.debug("Put is for region {}", regionPath);
-    }
-    if (!this.userRegionNameToShadowPRMap.containsKey(regionPath)) {
-      if (isDebugEnabled) {
-        logger.debug("The userRegionNameToShadowPRMap is {}", userRegionNameToShadowPRMap);
-      }
-      logger.warn(
-          "GatewaySender: Not queuing the event {}, as the region for which this event originated is not yet configured in the GatewaySender",
-          event);
-      return null;
-    }
-    return regionPath;
-  }
-
-  private Object getKeyForEventAndType(GatewaySenderEventImpl event, boolean isDREvent) {
-    Object key;
-    if (!isDREvent) {
-      key = event.getShadowKey();
-
-      if ((Long) key == -1) {
-        // In the case of parallel we expect the key to be set.
-        // If the key is not set, then the event must be coming
-        // through listener, so return.
-        if (logger.isDebugEnabled()) {
-          logger.debug("ParallelGatewaySenderOrderedQueue not putting key {} : Value : {}", key,
-              event);
-        }
-        return null;
-      }
-    } else {
-      key = event.getEventId();
-    }
-    return key;
-  }
-
   public void notifyEventProcessorIfRequired() {
     // putter thread should not take lock every time
     if (isQueueEmpty) {
@@ -952,41 +938,41 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
    */
   @Override
   public Region getRegion() {
-    return this.userRegionNameToShadowPRMap.size() == 1
-        ? (Region) this.userRegionNameToShadowPRMap.values().toArray()[0] : null;
+    return userRegionNameToShadowPRMap.size() == 1
+        ? (Region) userRegionNameToShadowPRMap.values().toArray()[0] : null;
   }
 
   public PartitionedRegion getRegion(String fullpath) {
-    return this.userRegionNameToShadowPRMap.get(fullpath);
+    return userRegionNameToShadowPRMap.get(fullpath);
   }
 
   public PartitionedRegion removeShadowPR(String fullpath) {
     try {
-      this.sender.getLifeCycleLock().writeLock().lock();
-      this.sender.setEnqueuedAllTempQueueEvents(false);
-      return this.userRegionNameToShadowPRMap.remove(fullpath);
+      sender.getLifeCycleLock().writeLock().lock();
+      sender.setEnqueuedAllTempQueueEvents(false);
+      return userRegionNameToShadowPRMap.remove(fullpath);
     } finally {
       sender.getLifeCycleLock().writeLock().unlock();
     }
   }
 
   public ExecutorService getConflationExecutor() {
-    return this.conflationExecutor;
+    return conflationExecutor;
   }
 
   /**
    * Returns the set of shadowPR backign this queue.
    */
   public Set<PartitionedRegion> getRegions() {
-    return new HashSet(this.userRegionNameToShadowPRMap.values());
+    return new HashSet(userRegionNameToShadowPRMap.values());
   }
 
   // TODO: Find optimal way to get Random shadow pr as this will be called in each put and peek.
   protected PartitionedRegion getRandomShadowPR() {
     PartitionedRegion prQ = null;
-    if (this.userRegionNameToShadowPRMap.values().size() > 0) {
-      int randomIndex = new Random().nextInt(this.userRegionNameToShadowPRMap.size());
-      prQ = (PartitionedRegion) this.userRegionNameToShadowPRMap.values().toArray()[randomIndex];
+    if (userRegionNameToShadowPRMap.values().size() > 0) {
+      int randomIndex = new Random().nextInt(userRegionNameToShadowPRMap.size());
+      prQ = (PartitionedRegion) userRegionNameToShadowPRMap.values().toArray()[randomIndex];
     }
     return prQ;
   }
@@ -1007,8 +993,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   }
 
   protected boolean areLocalBucketQueueRegionsPresent() {
-    boolean bucketsAvailable = false;
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       if (prQ.getDataStore().getAllLocalBucketRegions().size() > 0) {
         return true;
       }
@@ -1021,13 +1006,13 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   protected int getRandomPrimaryBucket(PartitionedRegion prQ) {
     if (prQ != null) {
       Set<Map.Entry<Integer, BucketRegion>> allBuckets = prQ.getDataStore().getAllLocalBuckets();
-      List<Integer> thisProcessorBuckets = new ArrayList<Integer>();
+      List<Integer> thisProcessorBuckets = new ArrayList<>();
 
       for (Map.Entry<Integer, BucketRegion> bucketEntry : allBuckets) {
         BucketRegion bucket = bucketEntry.getValue();
         if (bucket.getBucketAdvisor().isPrimary()) {
           int bId = bucket.getId();
-          if (bId % this.nDispatcher == this.index) {
+          if (bId % nDispatcher == index) {
             thisProcessorBuckets.add(bId);
           }
         }
@@ -1065,36 +1050,36 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   @Override
   public void remove() throws CacheException {
-    if (!this.peekedEvents.isEmpty()) {
+    if (!peekedEvents.isEmpty()) {
 
-      GatewaySenderEventImpl event = this.peekedEvents.remove();
+      GatewaySenderEventImpl event = peekedEvents.remove();
       try {
         PartitionedRegion prQ = null;
         int bucketId = -1;
         Object key = null;
         if (event.getRegion() != null) {
           if (isDREvent(sender.getCache(), event)) {
-            prQ = this.userRegionNameToShadowPRMap.get(event.getRegion().getFullPath());
+            prQ = userRegionNameToShadowPRMap.get(event.getRegion().getFullPath());
             bucketId = event.getEventId().getBucketID();
             key = event.getEventId();
           } else {
-            prQ = this.userRegionNameToShadowPRMap.get(ColocationHelper
+            prQ = userRegionNameToShadowPRMap.get(ColocationHelper
                 .getLeaderRegion((PartitionedRegion) event.getRegion()).getFullPath());
             bucketId = event.getBucketId();
             key = event.getShadowKey();
           }
         } else {
           String regionPath = event.getRegionPath();
-          InternalCache cache = this.sender.getCache();
-          Region region = (PartitionedRegion) cache.getRegion(regionPath);
+          InternalCache cache = sender.getCache();
+          Region region = cache.getRegion(regionPath);
           if (region != null && !region.isDestroyed()) {
             // TODO: We have to get colocated parent region for this region
             if (region instanceof DistributedRegion) {
-              prQ = this.userRegionNameToShadowPRMap.get(region.getFullPath());
+              prQ = userRegionNameToShadowPRMap.get(region.getFullPath());
               event.getBucketId();
               key = event.getEventId();
             } else {
-              prQ = this.userRegionNameToShadowPRMap
+              prQ = userRegionNameToShadowPRMap
                   .get(ColocationHelper.getLeaderRegion((PartitionedRegion) region).getFullPath());
               event.getBucketId();
               key = event.getShadowKey();
@@ -1125,10 +1110,10 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
       }
       stats.decQueueSize();
     } catch (EntryNotFoundException e) {
-      if (!this.sender.isBatchConflationEnabled() && logger.isDebugEnabled()) {
+      if (!sender.isBatchConflationEnabled() && logger.isDebugEnabled()) {
         logger.debug(
             "ParallelGatewaySenderQueue#remove: Got EntryNotFoundException while removing key {} for {} for bucket = {} for GatewaySender {}",
-            key, this, bucketId, this.sender);
+            key, this, bucketId, sender);
       }
     } catch (ForceReattemptException e) {
       if (logger.isDebugEnabled()) {
@@ -1149,11 +1134,11 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   }
 
   public void resetLastPeeked() {
-    this.resetLastPeeked = true;
+    resetLastPeeked = true;
 
     // Reset the in progress boolean and queue for peeked events in progress
-    this.peekedEventsProcessingInProgress = false;
-    this.peekedEventsProcessing.clear();
+    peekedEventsProcessingInProgress = false;
+    peekedEventsProcessing.clear();
   }
 
   // Need to improve here.If first peek returns NULL then look in another bucket.
@@ -1188,9 +1173,10 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
       lock.lock();
       boolean wasEmpty = regionToDispatchedKeysMap.isEmpty();
       try {
-        Map bucketIdToDispatchedKeys = (Map) regionToDispatchedKeysMap.get(prQ.getFullPath());
+        Map<Integer, List<Object>> bucketIdToDispatchedKeys =
+            regionToDispatchedKeysMap.get(prQ.getFullPath());
         if (bucketIdToDispatchedKeys == null) {
-          bucketIdToDispatchedKeys = new ConcurrentHashMap();
+          bucketIdToDispatchedKeys = new ConcurrentHashMap<Integer, List<Object>>();
           regionToDispatchedKeysMap.put(prQ.getFullPath(), bucketIdToDispatchedKeys);
         }
         addRemovedEventToMap(bucketIdToDispatchedKeys, bucketId, key);
@@ -1203,25 +1189,28 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     }
   }
 
-  public void sendQueueRemovalMesssageForDroppedEvent(PartitionedRegion prQ, int bucketId,
+  public void sendQueueRemovalMessageForDroppedEvent(PartitionedRegion prQ, int bucketId,
       Object key) {
-    final HashMap<String, Map<Integer, List>> temp = new HashMap<String, Map<Integer, List>>();
-    Map bucketIdToDispatchedKeys = new ConcurrentHashMap();
-    temp.put(prQ.getFullPath(), bucketIdToDispatchedKeys);
-    addRemovedEventToMap(bucketIdToDispatchedKeys, bucketId, key);
+
     Set<InternalDistributedMember> recipients =
-        removalThread.getAllRecipients(sender.getCache(), temp);
+        removalThread.getAllRecipientsForEvent(sender.getCache(), prQ.getFullPath(), bucketId);
+
     if (!recipients.isEmpty()) {
+      final Map<String, Map<Integer, List<Object>>> temp = new HashMap<>();
+      Map<Integer, List<Object>> bucketIdToDispatchedKeys = new ConcurrentHashMap<>();
+      temp.put(prQ.getFullPath(), bucketIdToDispatchedKeys);
+      addRemovedEventToMap(bucketIdToDispatchedKeys, bucketId, key);
       ParallelQueueRemovalMessage pqrm = new ParallelQueueRemovalMessage(temp);
       pqrm.setRecipients(recipients);
       sender.getCache().getInternalDistributedSystem().getDistributionManager().putOutgoing(pqrm);
     }
   }
 
-  private void addRemovedEventToMap(Map bucketIdToDispatchedKeys, int bucketId, Object key) {
-    List dispatchedKeys = (List) bucketIdToDispatchedKeys.get(bucketId);
+  private void addRemovedEventToMap(Map<Integer, List<Object>> bucketIdToDispatchedKeys,
+      int bucketId, Object key) {
+    List<Object> dispatchedKeys = bucketIdToDispatchedKeys.get(bucketId);
     if (dispatchedKeys == null) {
-      dispatchedKeys = new ArrayList<Object>();
+      dispatchedKeys = new ArrayList<>();
       bucketIdToDispatchedKeys.put(bucketId, dispatchedKeys);
     }
     dispatchedKeys.add(key);
@@ -1231,9 +1220,10 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     buckToDispatchLock.lock();
     boolean wasEmpty = regionToDispatchedKeysMap.isEmpty();
     try {
-      Map bucketIdToDispatchedKeys = (Map) regionToDispatchedKeysMap.get(prQ.getFullPath());
+      Map<Integer, List<Object>> bucketIdToDispatchedKeys =
+          regionToDispatchedKeysMap.get(prQ.getFullPath());
       if (bucketIdToDispatchedKeys == null) {
-        bucketIdToDispatchedKeys = new ConcurrentHashMap();
+        bucketIdToDispatchedKeys = new ConcurrentHashMap<>();
         regionToDispatchedKeysMap.put(prQ.getFullPath(), bucketIdToDispatchedKeys);
       }
       addRemovedEventsToMap(bucketIdToDispatchedKeys, bucketId, shadowKeys);
@@ -1249,9 +1239,9 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     buckToDispatchLock.lock();
     boolean wasEmpty = regionToDispatchedKeysMap.isEmpty();
     try {
-      Map bucketIdToDispatchedKeys = (Map) regionToDispatchedKeysMap.get(prQPath);
+      Map<Integer, List<Object>> bucketIdToDispatchedKeys = regionToDispatchedKeysMap.get(prQPath);
       if (bucketIdToDispatchedKeys == null) {
-        bucketIdToDispatchedKeys = new ConcurrentHashMap();
+        bucketIdToDispatchedKeys = new ConcurrentHashMap<>();
         regionToDispatchedKeysMap.put(prQPath, bucketIdToDispatchedKeys);
       }
       addRemovedEventsToMap(bucketIdToDispatchedKeys, bucketId, shadowKeys);
@@ -1263,10 +1253,11 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     }
   }
 
-  private void addRemovedEventsToMap(Map bucketIdToDispatchedKeys, int bucketId, List keys) {
-    List dispatchedKeys = (List) bucketIdToDispatchedKeys.get(bucketId);
+  private void addRemovedEventsToMap(Map<Integer, List<Object>> bucketIdToDispatchedKeys,
+      int bucketId, List<Object> keys) {
+    List<Object> dispatchedKeys = bucketIdToDispatchedKeys.get(bucketId);
     if (dispatchedKeys == null) {
-      dispatchedKeys = keys == null ? new ArrayList<Object>() : keys;
+      dispatchedKeys = keys == null ? new ArrayList<>() : keys;
     } else {
       dispatchedKeys.addAll(keys);
     }
@@ -1421,9 +1412,10 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         }
       }
       if (incompleteTransactionIdsInBatch.size() == 0 ||
-          retries++ == GET_TRANSACTION_EVENTS_FROM_QUEUE_RETRIES) {
+          retries >= sender.getRetriesToGetTransactionEventsFromQueue()) {
         break;
       }
+      retries++;
       try {
         Thread.sleep(GET_TRANSACTION_EVENTS_FROM_QUEUE_WAIT_TIME_MS);
       } catch (InterruptedException e) {
@@ -1474,7 +1466,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   }
 
   private void addPeekedEvents(List<GatewaySenderEventImpl> batch, int batchSize) {
-    if (this.resetLastPeeked) {
+    if (resetLastPeeked) {
 
       // Remove all entries from peekedEvents for buckets that are not longer primary
       // This will prevent repeatedly trying to dispatch non-primary events
@@ -1495,7 +1487,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         }
       }
 
-      if (this.peekedEventsProcessingInProgress) {
+      if (peekedEventsProcessingInProgress) {
         // Peeked event processing is in progress. This means that the original peekedEvents
         // contained > batch size events due to a reduction in the batch size. Create a batch
         // from the peekedEventsProcessing queue.
@@ -1504,19 +1496,19 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         // This is the normal case. The connection was lost while processing a batch.
         // This recreates the batch from the current peekedEvents.
         batch.addAll(peekedEvents);
-        this.resetLastPeeked = false;
+        resetLastPeeked = false;
       } else {
         // The peekedEvents queue is > batch size. This means that the previous batch size was
         // reduced due to MessageTooLargeException. Create a batch from the peekedEventsProcessing
         // queue.
         // This could also be a normal case in which the batch included extra events to make
         // sure that events for each transaction were sent in the same batch.
-        this.peekedEventsProcessing.addAll(this.peekedEvents);
-        this.peekedEventsProcessingInProgress = true;
+        peekedEventsProcessing.addAll(peekedEvents);
+        peekedEventsProcessingInProgress = true;
         addPreviouslyPeekedEvents(batch, batchSize);
       }
       if (logger.isDebugEnabled()) {
-        StringBuffer buffer = new StringBuffer();
+        StringBuilder buffer = new StringBuilder();
         for (Object ge : batch) {
           buffer.append("event :");
           buffer.append(ge);
@@ -1529,7 +1521,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   private void addPreviouslyPeekedEvents(List<GatewaySenderEventImpl> batch, int batchSize) {
     Set<TransactionId> incompleteTransactionsInBatch = new HashSet<>();
     for (int i = 0; i < batchSize || incompleteTransactionsInBatch.size() != 0; i++) {
-      GatewaySenderEventImpl event = this.peekedEventsProcessing.remove();
+      GatewaySenderEventImpl event = peekedEventsProcessing.remove();
       batch.add(event);
       if (mustGroupTransactionEvents()) {
         if (event.getTransactionId() != null) {
@@ -1540,9 +1532,9 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
           }
         }
       }
-      if (this.peekedEventsProcessing.isEmpty()) {
-        this.resetLastPeeked = false;
-        this.peekedEventsProcessingInProgress = false;
+      if (peekedEventsProcessing.isEmpty()) {
+        resetLastPeeked = false;
+        peekedEventsProcessingInProgress = false;
         break;
       }
     }
@@ -1563,7 +1555,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
         // merge44610: this time waiting came from cheetah 44610
       }
       // update the flag so that next time when we come we will block.
-      isQueueEmpty = this.localSizeForProcessor() == 0;
+      isQueueEmpty = localSizeForProcessor() == 0;
     } finally {
       if (logger.isDebugEnabled()) {
         logger.debug("Going to unblock. isQueueEmpty {}", isQueueEmpty);
@@ -1590,8 +1582,8 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     }
 
     if (object == null) {
-      if (this.stats != null) {
-        this.stats.incEventsNotQueuedConflated();
+      if (stats != null) {
+        stats.incEventsNotQueuedConflated();
       }
     }
     return object; // OFFHEAP: ok since callers are careful to do destroys on region queue after
@@ -1604,9 +1596,9 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     BucketRegionQueue brq = getBucketRegionQueueByBucketId(prQ, bucketId);
 
     try {
-      Predicate<InternalGatewayQueueEvent> hasTransactionIdPredicate =
+      Predicate<GatewaySenderEventImpl> hasTransactionIdPredicate =
           getHasTransactionIdPredicate(transactionId);
-      Predicate<InternalGatewayQueueEvent> isLastEventInTransactionPredicate =
+      Predicate<GatewaySenderEventImpl> isLastEventInTransactionPredicate =
           getIsLastEventInTransactionPredicate();
       objects =
           brq.getElementsMatching(hasTransactionIdPredicate, isLastEventInTransactionPredicate);
@@ -1620,12 +1612,12 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   }
 
   @VisibleForTesting
-  public static Predicate<InternalGatewayQueueEvent> getIsLastEventInTransactionPredicate() {
-    return x -> x.isLastEventInTransaction();
+  public static Predicate<GatewaySenderEventImpl> getIsLastEventInTransactionPredicate() {
+    return GatewaySenderEventImpl::isLastEventInTransaction;
   }
 
   @VisibleForTesting
-  public static Predicate<InternalGatewayQueueEvent> getHasTransactionIdPredicate(
+  public static Predicate<GatewaySenderEventImpl> getHasTransactionIdPredicate(
       TransactionId transactionId) {
     return x -> transactionId.equals(x.getTransactionId());
   }
@@ -1636,8 +1628,8 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   }
 
   public String displayContent() {
-    StringBuffer sb = new StringBuffer();
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    StringBuilder sb = new StringBuilder();
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       if (prQ != null && prQ.getDataStore() != null) {
         Set<BucketRegion> allLocalBuckets = prQ.getDataStore().getAllLocalBucketRegions();
         for (BucketRegion br : allLocalBuckets) {
@@ -1656,7 +1648,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   public int localSize(boolean includeSecondary) {
     int size = 0;
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       if (prQ.getDataStore() != null) {
         if (includeSecondary) {
           size += prQ.getDataStore().getSizeOfLocalBuckets();
@@ -1674,13 +1666,13 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   public int localSizeForProcessor() {
     int size = 0;
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       if (((PartitionedRegion) prQ.getRegion()).getDataStore() != null) {
         Set<BucketRegion> primaryBuckets =
             ((PartitionedRegion) prQ.getRegion()).getDataStore().getAllLocalPrimaryBucketRegions();
 
         for (BucketRegion br : primaryBuckets) {
-          if (br.getId() % this.nDispatcher == this.index) {
+          if (br.getId() % nDispatcher == index) {
             size += br.size();
           }
         }
@@ -1696,7 +1688,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   @Override
   public int size() {
     int size = 0;
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       if (logger.isDebugEnabled()) {
         logger.debug("The name of the queue region is {} and the size is {}. keyset size is {}",
             prQ.getName(), prQ.size(), prQ.keys().size());
@@ -1709,7 +1701,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   @Override
   public void addCacheListener(CacheListener listener) {
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       AttributesMutator mutator = prQ.getAttributesMutator();
       mutator.addCacheListener(listener);
     }
@@ -1735,7 +1727,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   public long getNumEntriesOverflowOnDiskTestOnly() {
     long numEntriesOnDisk = 0;
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       DiskRegionStats diskStats = prQ.getDiskRegionStats();
       if (diskStats == null) {
         if (logger.isDebugEnabled()) {
@@ -1757,7 +1749,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
   public long getNumEntriesInVMTestOnly() {
     long numEntriesInVM = 0;
-    for (PartitionedRegion prQ : this.userRegionNameToShadowPRMap.values()) {
+    for (PartitionedRegion prQ : userRegionNameToShadowPRMap.values()) {
       DiskRegionStats diskStats = prQ.getDiskRegionStats();
       if (diskStats == null) {
         if (logger.isDebugEnabled()) {
@@ -1783,7 +1775,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
   public void cleanUp() {
     regionToDispatchedKeysMap.clear();
     removalThread.shutdown();
-    cleanupConflationThreadPool(this.sender);
+    cleanupConflationThreadPool(sender);
   }
 
   @Override
@@ -1815,7 +1807,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
    * @return the bucketToTempQueueMap
    */
   public Map<Integer, BlockingQueue<GatewaySenderEventImpl>> getBucketToTempQueueMap() {
-    return this.bucketToTempQueueMap;
+    return bucketToTempQueueMap;
   }
 
   public static boolean isParallelQueue(String regionName) {
@@ -1832,21 +1824,6 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
     return regionName.substring(1, queueStringStart);
   }
 
-  public boolean hasEventsMatching(GatewaySenderEventImpl event,
-      Predicate<InternalGatewayQueueEvent> condition) {
-    boolean isDREvent = isDREvent(sender.getCache(), event);
-
-    String regionPath = getRegionPathForEventAndType(event, isDREvent);
-    if (regionPath == null) {
-      return true;
-    }
-    PartitionedRegion prQ = this.userRegionNameToShadowPRMap.get(regionPath);
-    int bucketId = event.getBucketId();
-    BucketRegionQueue brq = getBucketRegionQueueByBucketId(prQ, bucketId);
-
-    return brq.hasEventsMatching(condition);
-  }
-
   // TODO:REF: Name for this class should be appropriate?
   private class BatchRemovalThread extends Thread {
     /**
@@ -1861,18 +1838,15 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
      */
     public BatchRemovalThread(InternalCache c, ParallelGatewaySenderQueue queue) {
       super("BatchRemovalThread for GatewaySender_" + queue.sender.getId() + "_" + queue.index);
-      this.setDaemon(true);
-      this.cache = c;
+      setDaemon(true);
+      cache = c;
     }
 
     private boolean checkCancelled() {
       if (shutdown) {
         return true;
       }
-      if (cache.getCancelCriterion().isCancelInProgress()) {
-        return true;
-      }
-      return false;
+      return cache.getCancelCriterion().isCancelInProgress();
     }
 
     @Override
@@ -1890,7 +1864,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
             boolean interrupted = Thread.interrupted();
             try {
               synchronized (this) {
-                this.wait(messageSyncInterval);
+                wait(messageSyncInterval);
               }
             } catch (InterruptedException e) {
               interrupted = true;
@@ -1919,7 +1893,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
               }
             }
 
-            final HashMap<String, Map<Integer, List>> temp;
+            final Map<String, Map<Integer, List<Object>>> temp;
             buckToDispatchLock.lock();
             try {
               boolean wasEmpty = regionToDispatchedKeysMap.isEmpty();
@@ -1930,7 +1904,9 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
                 continue;
               }
               // TODO: This should be optimized.
-              temp = new HashMap<String, Map<Integer, List>>(regionToDispatchedKeysMap);
+
+              temp = new HashMap<>(regionToDispatchedKeysMap);
+
               regionToDispatchedKeysMap.clear();
             } finally {
               buckToDispatchLock.unlock();
@@ -1999,15 +1975,44 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
       return recipients;
     }
 
+    private Set<InternalDistributedMember> getAllRecipientsForEvent(InternalCache cache,
+        String partitionedRegionName, int bucketId) {
+      Set<InternalDistributedMember> recipients = new ObjectOpenHashSet<>();
+      PartitionedRegion partitionedRegion =
+          (PartitionedRegion) cache.getRegion(partitionedRegionName);
+      if (partitionedRegion != null && partitionedRegion.getRegionAdvisor() != null) {
+        final String bucketFullPath =
+            SEPARATOR + PartitionedRegionHelper.PR_ROOT_REGION_NAME + SEPARATOR
+                + partitionedRegion.getBucketName(bucketId);
+        AbstractBucketRegionQueue bucketRegionQueue =
+            (AbstractBucketRegionQueue) cache.getInternalRegionByPath(bucketFullPath);
+        if (bucketRegionQueue != null && bucketRegionQueue.getBucketAdvisor() != null) {
+          Set<InternalDistributedMember> bucketMembers =
+              bucketRegionQueue.getBucketAdvisor().adviseInitialized();
+          if (!bucketMembers.isEmpty()) {
+            recipients.addAll(bucketMembers);
+          } else {
+            recipients.addAll(partitionedRegion.getRegionAdvisor().adviseDataStore());
+          }
+        } else {
+          recipients.addAll(partitionedRegion.getRegionAdvisor().adviseDataStore());
+        }
+      }
+
+      return recipients;
+    }
+
+
+
     /**
      * shutdown this thread and the caller thread will join this thread
      */
     public void shutdown() {
-      this.shutdown = true;
-      this.interrupt();
+      shutdown = true;
+      interrupt();
       boolean interrupted = Thread.interrupted();
       try {
-        this.join(15 * 1000);
+        join(15 * 1000);
       } catch (InterruptedException e) {
         interrupted = true;
       } finally {
@@ -2015,7 +2020,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
           Thread.currentThread().interrupt();
         }
       }
-      if (this.isAlive()) {
+      if (isAlive()) {
         logger.warn("QueueRemovalThread ignored cancellation");
       }
     }
@@ -2032,9 +2037,9 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
           new InternalRegionArguments().setDestroyLockFlag(true).setRecreateFlag(false)
               .setSnapshotInputStream(null).setImageTarget(null)
               .setIsUsedForParallelGatewaySenderQueue(true)
-              .setParallelGatewaySender((AbstractGatewaySender) pgSender),
+              .setParallelGatewaySender(pgSender),
           statisticsClock, ColocationLoggerFactory.create());
-      this.sender = (AbstractGatewaySender) pgSender;
+      sender = pgSender;
 
     }
 
@@ -2072,7 +2077,7 @@ public class ParallelGatewaySenderQueue implements RegionQueue {
 
     @Override
     public AbstractGatewaySender getParallelGatewaySender() {
-      return this.sender;
+      return sender;
     }
   }
 

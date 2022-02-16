@@ -17,6 +17,7 @@ package org.apache.geode.internal.cache.tier.sockets.command;
 import java.io.IOException;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.Region;
@@ -57,8 +58,10 @@ public class GetAllWithCallback extends BaseCommand {
   }
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start) throws IOException, InterruptedException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start)
+      throws IOException, InterruptedException {
     Part regionNamePart = null, keysPart = null, callbackPart = null;
     String regionName = null;
     Object[] keys = null;
@@ -96,8 +99,8 @@ public class GetAllWithCallback extends BaseCommand {
           .append(serverConnection.getSocketString()).append(" for region ").append(regionName)
           .append(" with callback ").append(callback).append(" keys ");
       if (keys != null) {
-        for (int i = 0; i < keys.length; i++) {
-          buffer.append(keys[i]).append(" ");
+        for (final Object key : keys) {
+          buffer.append(key).append(" ");
         }
       } else {
         buffer.append("NULL");
@@ -160,7 +163,7 @@ public class GetAllWithCallback extends BaseCommand {
       AuthorizeRequest authzRequest = servConn.getAuthzRequest();
       AuthorizeRequestPP postAuthzRequest = servConn.getPostAuthzRequest();
       Get70 request = (Get70) Get70.getCommand();
-      for (int i = 0; i < numKeys; i++) {
+      for (final Object o : keys) {
         // Send the intermediate chunk if necessary
         if (values.size() == MAXIMUM_CHUNK_SIZE) {
           // Send the chunk and clear the list
@@ -170,7 +173,7 @@ public class GetAllWithCallback extends BaseCommand {
 
         Object key;
         boolean keyNotPresent = false;
-        key = keys[i];
+        key = o;
         if (logger.isDebugEnabled()) {
           logger.debug("{}: Getting value for key={}", servConn.getName(), key);
         }
@@ -185,7 +188,7 @@ public class GetAllWithCallback extends BaseCommand {
           } catch (NotAuthorizedException ex) {
             logger.warn(String.format(
                 "%s: Caught the following exception attempting to get value for key=%s",
-                new Object[] {servConn.getName(), key}),
+                servConn.getName(), key),
                 ex);
             values.addExceptionPart(key, ex);
             continue;
@@ -197,7 +200,7 @@ public class GetAllWithCallback extends BaseCommand {
         } catch (NotAuthorizedException ex) {
           logger.warn(
               String.format("%s: Caught the following exception attempting to get value for key=%s",
-                  new Object[] {servConn.getName(), key}),
+                  servConn.getName(), key),
               ex);
           values.addExceptionPart(key, ex);
           continue;
@@ -234,7 +237,7 @@ public class GetAllWithCallback extends BaseCommand {
             } catch (NotAuthorizedException ex) {
               logger.warn(String.format(
                   "%s: Caught the following exception attempting to get value for key=%s",
-                  new Object[] {servConn.getName(), key}),
+                  servConn.getName(), key),
                   ex);
               values.addExceptionPart(key, ex);
               continue;

@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 import java.util.List;
 import java.util.stream.IntStream;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -32,15 +31,15 @@ import org.junit.runner.RunWith;
 
 import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.Region;
-import org.apache.geode.internal.cache.GemFireCacheImpl;
 import org.apache.geode.internal.cache.PartitionedRegion;
 import org.apache.geode.internal.cache.control.HeapMemoryMonitor;
 import org.apache.geode.test.dunit.SerializableRunnableIF;
 import org.apache.geode.test.junit.categories.LuceneTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 
 @Category({LuceneTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class EvictionDUnitTest extends LuceneQueriesAccessorBase {
 
   protected static final float INITIAL_EVICTION_HEAP_PERCENTAGE = 50.9f;
@@ -129,20 +128,20 @@ public class EvictionDUnitTest extends LuceneQueriesAccessorBase {
   }
 
   protected void raiseFakeNotification() {
-    ((GemFireCacheImpl) getCache()).getHeapEvictor().setTestAbortAfterLoopCount(1);
+    getCache().getHeapEvictor().setTestAbortAfterLoopCount(1);
     HeapMemoryMonitor.setTestDisableMemoryUpdates(true);
 
     getCache().getResourceManager()
         .setEvictionHeapPercentage(EVICTION_HEAP_PERCENTAGE_FAKE_NOTIFICATION);
     HeapMemoryMonitor heapMemoryMonitor =
-        ((GemFireCacheImpl) getCache()).getInternalResourceManager().getHeapMonitor();
+        getCache().getInternalResourceManager().getHeapMonitor();
     heapMemoryMonitor.setTestMaxMemoryBytes(TEST_MAX_MEMORY);
 
     heapMemoryMonitor.updateStateAndSendEvent(MEMORY_USED_FAKE_NOTIFICATION, "test");
   }
 
   protected void cleanUpAfterFakeNotification() {
-    ((GemFireCacheImpl) getCache()).getHeapEvictor().setTestAbortAfterLoopCount(Integer.MAX_VALUE);
+    getCache().getHeapEvictor().setTestAbortAfterLoopCount(Integer.MAX_VALUE);
     HeapMemoryMonitor.setTestDisableMemoryUpdates(false);
   }
 

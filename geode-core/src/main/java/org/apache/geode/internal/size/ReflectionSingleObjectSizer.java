@@ -14,6 +14,8 @@
  */
 package org.apache.geode.internal.size;
 
+import static org.apache.geode.internal.JvmSizeUtils.roundUpSize;
+
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -30,6 +32,7 @@ import org.apache.geode.unsafe.internal.sun.misc.Unsafe;
  *
  */
 public class ReflectionSingleObjectSizer implements SingleObjectSizer {
+
   public static final int REFERENCE_SIZE = JvmSizeUtils.getReferenceSize();
   public static final int OBJECT_SIZE = JvmSizeUtils.getObjectHeaderSize();
 
@@ -39,8 +42,7 @@ public class ReflectionSingleObjectSizer implements SingleObjectSizer {
     Unsafe tmp = null;
     try {
       tmp = new Unsafe();
-    } catch (RuntimeException ignore) {
-    } catch (Error ignore) {
+    } catch (RuntimeException | Error ignore) {
     }
     unsafe = tmp;
   }
@@ -83,7 +85,7 @@ public class ReflectionSingleObjectSizer implements SingleObjectSizer {
     }
   }
 
-  public static long sizeof(Class clazz) {
+  public static long sizeof(Class<?> clazz) {
     return sizeof(clazz, true);
   }
 
@@ -91,7 +93,7 @@ public class ReflectionSingleObjectSizer implements SingleObjectSizer {
    * Since unsafe.fieldOffset(Field) will give us the offset to the first byte of that field all we
    * need to do is find which of the non-static declared fields has the greatest offset.
    */
-  public static long sizeof(Class clazz, boolean roundResult) {
+  public static long sizeof(Class<?> clazz, boolean roundResult) {
     Assert.assertTrue(!clazz.isArray());
     long size;
     if (unsafe != null) {
@@ -143,17 +145,6 @@ public class ReflectionSingleObjectSizer implements SingleObjectSizer {
     return size;
   }
 
-  public static long roundUpSize(long size) {
-    // Round up to the nearest 8 bytes. Experimentally, this
-    // is what we've seen the sun 32 bit VM do with object size.
-    // See https://wiki.gemstone.com/display/rusage/Per+Entry+Overhead
-    long remainder = size % 8;
-    if (remainder != 0) {
-      size = size - remainder + 8;
-    }
-    return size;
-  }
-
   private static int sizeType(Class<?> t) {
 
     if (t == Boolean.TYPE) {
@@ -178,6 +169,4 @@ public class ReflectionSingleObjectSizer implements SingleObjectSizer {
       return REFERENCE_SIZE;
     }
   }
-
-
 }

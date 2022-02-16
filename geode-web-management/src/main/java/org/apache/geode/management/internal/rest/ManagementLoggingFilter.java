@@ -34,7 +34,7 @@ public class ManagementLoggingFilter extends OncePerRequestFilter {
   private static final Boolean ENABLE_REQUEST_LOGGING =
       Boolean.parseBoolean(System.getProperty("geode.management.request.logging", "false"));
 
-  private static int MAX_PAYLOAD_LENGTH = 10000;
+  private static final int MAX_PAYLOAD_LENGTH = 10000;
 
   @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -102,6 +102,14 @@ public class ManagementLoggingFilter extends OncePerRequestFilter {
       return "";
     }
     int length = Math.min(buf.length, MAX_PAYLOAD_LENGTH);
+
+    for (int i = 0; i < length; i++) {
+      if (buf[i] != '\n' && buf[i] != '\r' &&
+          (buf[i] < ' ' || buf[i] > '~')) {
+        buf[i] = '?';
+      }
+    }
+
     try {
       return new String(buf, 0, length, encoding);
     } catch (UnsupportedEncodingException ex) {

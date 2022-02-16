@@ -12,7 +12,10 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 package org.apache.geode.cache.client.internal;
+
+import static java.lang.ThreadLocal.withInitial;
 
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,17 +23,25 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.geode.cache.client.Pool;
 import org.apache.geode.distributed.internal.ServerLocation;
 
+/**
+ * An instance of the class is created per ProxyCache/RegionService
+ */
 public class UserAttributes {
 
   private Properties credentials;
-  // Update this whenever we lose/add a server.
-  private ConcurrentHashMap<ServerLocation, Long> serverToId =
-      new ConcurrentHashMap<ServerLocation, Long>();
 
-  private Pool pool;
+  /**
+   * Update this whenever we lose/add a server.
+   */
+  private final ConcurrentHashMap<ServerLocation, Long> serverToId = new ConcurrentHashMap<>();
 
-  public static final ThreadLocal<UserAttributes> userAttributes =
-      new ThreadLocal<UserAttributes>();
+  private final Pool pool;
+
+  /**
+   * Intentionally {@code null} initially to indicate no {@link UserAttributes} associated with
+   * this thread.
+   */
+  public static final ThreadLocal<UserAttributes> userAttributes = withInitial(() -> null);
 
   public UserAttributes(Properties credentials, Pool pool) {
     this.credentials = credentials;
@@ -56,4 +67,5 @@ public class UserAttributes {
   public Pool getPool() {
     return pool;
   }
+
 }

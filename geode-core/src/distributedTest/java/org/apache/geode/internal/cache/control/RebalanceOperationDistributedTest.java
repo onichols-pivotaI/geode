@@ -56,7 +56,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import junitparams.naming.TestCaseName;
 import org.junit.After;
@@ -65,7 +64,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.apache.geode.cache.AttributesFactory;
-import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.CacheLoader;
 import org.apache.geode.cache.CacheLoaderException;
@@ -111,6 +109,7 @@ import org.apache.geode.test.dunit.WaitCriterion;
 import org.apache.geode.test.dunit.cache.CacheTestCase;
 import org.apache.geode.test.dunit.rules.DistributedRestoreSystemProperties;
 import org.apache.geode.test.junit.rules.ExecutorServiceRule;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 import org.apache.geode.util.internal.GeodeGlossary;
 
 /**
@@ -119,7 +118,7 @@ import org.apache.geode.util.internal.GeodeGlossary;
  * <p>
  * TODO test colocated regions where members aren't consistent in which regions they have
  */
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 @SuppressWarnings("serial")
 public class RebalanceOperationDistributedTest extends CacheTestCase {
 
@@ -386,7 +385,7 @@ public class RebalanceOperationDistributedTest extends CacheTestCase {
     vm0.invoke(() -> InternalResourceManager.setResourceObserver(new ParallelRecoveryObserver(2)));
 
     // Create the region in only 1 VM
-    vm0.invoke(() -> createTwoRegionsWithParallelRecoveryObserver());
+    vm0.invoke(this::createTwoRegionsWithParallelRecoveryObserver);
 
     // Create some buckets
     vm0.invoke(() -> {
@@ -762,7 +761,7 @@ public class RebalanceOperationDistributedTest extends CacheTestCase {
 
     // Create some buckets. Put enough data to cause the queue to overflow (more than 1 MB)
     vm0.invoke(() -> {
-      Region<Number, String> region = ((Cache) getCache()).getRegion("region1");
+      Region<Number, String> region = getCache().getRegion("region1");
       for (int i = 0; i < 12; i++) {
         region.put(i, "A", new byte[1024 * 512]);
       }
@@ -865,7 +864,7 @@ public class RebalanceOperationDistributedTest extends CacheTestCase {
 
     // Create some buckets
     vm0.invoke(() -> {
-      Region<Number, String> region = ((Cache) getCache()).getRegion("region1");
+      Region<Number, String> region = getCache().getRegion("region1");
       region.put(1, "A");
     });
 
@@ -1345,7 +1344,7 @@ public class RebalanceOperationDistributedTest extends CacheTestCase {
 
     // Create some buckets
     vm0.invoke(() -> {
-      Region<Number, String> region = ((Cache) getCache()).getRegion("region1");
+      Region<Number, String> region = getCache().getRegion("region1");
       for (int bucket = 0; bucket < 12; bucket++) {
         Map<Number, String> map = new HashMap<>();
         for (int key = 0; key < 200; key++) {

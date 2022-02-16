@@ -204,7 +204,8 @@ public class ClientSideHandshakeImpl extends Handshake implements ClientSideHand
 
       // Successful handshake for GATEWAY_TO_GATEWAY mode sets the peer version in connection
       if (communicationMode.isWAN() && !(acceptanceCode == REPLY_EXCEPTION_AUTHENTICATION_REQUIRED
-          || acceptanceCode == REPLY_EXCEPTION_AUTHENTICATION_FAILED)) {
+          || acceptanceCode == REPLY_EXCEPTION_AUTHENTICATION_FAILED
+          || acceptanceCode == REPLY_REFUSED || acceptanceCode == REPLY_INVALID)) {
         short wanSiteVersion = VersioningIO.readOrdinal(dis);
         conn.setWanSiteVersion(wanSiteVersion);
         // establish a versioned stream for the other site, if necessary
@@ -245,11 +246,9 @@ public class ClientSideHandshakeImpl extends Handshake implements ClientSideHand
                   + " matches this sites distributed system id " + localDistributedSystemId);
         }
       }
+
       // Read the PDX registry size from the remote size
-      if (communicationMode.isWAN()
-          && KnownVersion.GFE_80
-              .compareTo(Versioning.getVersion(conn.getWanSiteVersion())) <= 0
-          && currentClientVersion.isNotOlderThan(KnownVersion.GFE_80)) {
+      if (communicationMode.isWAN()) {
         int remotePdxSize = dis.readInt();
         serverQStatus.setPdxSize(remotePdxSize);
       }

@@ -22,7 +22,6 @@ import static org.apache.geode.internal.serialization.DataSerializableFixedID.CR
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,7 +69,6 @@ import org.apache.geode.cache.lucene.internal.results.LuceneGetPageFunction;
 import org.apache.geode.cache.lucene.internal.results.PageResults;
 import org.apache.geode.cache.lucene.internal.xml.LuceneServiceXmlGenerator;
 import org.apache.geode.distributed.internal.membership.InternalDistributedMember;
-import org.apache.geode.internal.InternalDataSerializer;
 import org.apache.geode.internal.cache.BucketNotFoundException;
 import org.apache.geode.internal.cache.BucketRegion;
 import org.apache.geode.internal.cache.CacheService;
@@ -81,6 +79,8 @@ import org.apache.geode.internal.cache.RegionListener;
 import org.apache.geode.internal.cache.extension.Extensible;
 import org.apache.geode.internal.cache.xmlcache.XmlGenerator;
 import org.apache.geode.internal.serialization.DataSerializableFixedID;
+import org.apache.geode.internal.serialization.DataSerializableFixedIdRegistrant;
+import org.apache.geode.internal.serialization.DataSerializableFixedIdRegistrar;
 import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.internal.serialization.Version;
 import org.apache.geode.logging.internal.log4j.api.LogService;
@@ -93,7 +93,7 @@ import org.apache.geode.util.internal.GeodeGlossary;
  *
  * @since GemFire 8.5
  */
-public class LuceneServiceImpl implements InternalLuceneService {
+public class LuceneServiceImpl implements InternalLuceneService, DataSerializableFixedIdRegistrant {
   public static LuceneIndexImplFactory luceneIndexFactory = new LuceneIndexImplFactory();
   private static final Logger logger = LogService.getLogger();
 
@@ -116,7 +116,7 @@ public class LuceneServiceImpl implements InternalLuceneService {
 
   @Override
   public Cache getCache() {
-    return this.cache;
+    return cache;
   }
 
   @Override
@@ -133,7 +133,6 @@ public class LuceneServiceImpl implements InternalLuceneService {
     FunctionService.registerFunction(new WaitUntilFlushedFunction());
     FunctionService.registerFunction(new IndexingInProgressFunction());
     FunctionService.registerFunction(new DumpDirectoryFiles());
-    registerDataSerializables();
 
     return true;
   }
@@ -141,7 +140,7 @@ public class LuceneServiceImpl implements InternalLuceneService {
   @Override
   public CacheServiceMBeanBase getMBean() {
     LuceneServiceMBean mbean = new LuceneServiceMBean(this);
-    this.managementListener = new ManagementIndexListener(mbean);
+    managementListener = new ManagementIndexListener(mbean);
     return mbean;
   }
 
@@ -153,7 +152,8 @@ public class LuceneServiceImpl implements InternalLuceneService {
   public void beforeRegionDestroyed(Region region) {
     List<LuceneIndex> indexes = getIndexes(region.getFullPath());
     if (!indexes.isEmpty()) {
-      String indexNames = indexes.stream().map(i -> i.getName()).collect(Collectors.joining(","));
+      String indexNames =
+          indexes.stream().map(LuceneIndex::getName).collect(Collectors.joining(","));
       throw new IllegalStateException(
           String.format(
               "Region %s cannot be destroyed because it defines Lucene index(es) [%s]. Destroy all Lucene indexes before destroying the region.",
@@ -171,7 +171,7 @@ public class LuceneServiceImpl implements InternalLuceneService {
       // Stop and remove the AsyncEventQueue if it exists
       if (aeq != null) {
         aeq.stop();
-        this.cache.removeAsyncEventQueue(aeq);
+        cache.removeAsyncEventQueue(aeq);
       }
     }
   }
@@ -311,9 +311,13 @@ public class LuceneServiceImpl implements InternalLuceneService {
       PartitionedRepositoryManager repositoryManager =
           (PartitionedRepositoryManager) luceneIndex.getRepositoryManager();
       Set<Integer> primaryBucketIds = userRegion.getDataStore().getAllLocalPrimaryBucketIds();
-      Iterator primaryBucketIterator = primaryBucketIds.iterator();
-      while (primaryBucketIterator.hasNext()) {
-        int primaryBucketId = (Integer) primaryBucketIterator.next();
+      /**
+       *
+       * Calling getRepository will in turn call computeRepository
+       * which is responsible for indexing the user region.
+       *
+       **/
+      for (final int primaryBucketId : primaryBucketIds) {
         try {
           BucketRegion userBucket = userRegion.getDataStore().getLocalBucketById(primaryBucketId);
           if (userBucket == null) {
@@ -371,8 +375,8 @@ public class LuceneServiceImpl implements InternalLuceneService {
   public void afterDataRegionCreated(InternalLuceneIndex index) {
     index.initialize();
 
-    if (this.managementListener != null) {
-      this.managementListener.afterIndexCreated(index);
+    if (managementListener != null) {
+      managementListener.afterIndexCreated(index);
     }
 
     String aeqId = LuceneServiceImpl.getUniqueIndexName(index.getName(), index.getRegionPath());
@@ -603,56 +607,43 @@ public class LuceneServiceImpl implements InternalLuceneService {
   }
 
   public void unregisterIndex(final String region) {
-    if (indexMap.containsKey(region)) {
-      indexMap.remove(region);
-    }
+    indexMap.remove(region);
   }
 
-  /** Public for test purposes */
-  public static void registerDataSerializables() {
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(CREATE_REGION_MESSAGE_LUCENE,
+  @Override
+  public void register(DataSerializableFixedIdRegistrar registrar) {
+    registrar.register(CREATE_REGION_MESSAGE_LUCENE,
         CreateRegionProcessorForLucene.CreateRegionMessage.class);
-    InternalDataSerializer.getDSFIDSerializer()
-        .registerDSFID(DataSerializableFixedID.LUCENE_CHUNK_KEY, ChunkKey.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(DataSerializableFixedID.LUCENE_FILE,
-        File.class);
+    registrar.register(DataSerializableFixedID.LUCENE_CHUNK_KEY, ChunkKey.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(
-        DataSerializableFixedID.LUCENE_FUNCTION_CONTEXT,
+    registrar.register(DataSerializableFixedID.LUCENE_FILE, File.class);
+
+    registrar.register(DataSerializableFixedID.LUCENE_FUNCTION_CONTEXT,
         LuceneFunctionContext.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(
-        DataSerializableFixedID.LUCENE_STRING_QUERY_PROVIDER,
+    registrar.register(DataSerializableFixedID.LUCENE_STRING_QUERY_PROVIDER,
         StringQueryProvider.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(
-        DataSerializableFixedID.LUCENE_TOP_ENTRIES_COLLECTOR_MANAGER,
+    registrar.register(DataSerializableFixedID.LUCENE_TOP_ENTRIES_COLLECTOR_MANAGER,
         TopEntriesCollectorManager.class);
 
-    InternalDataSerializer.getDSFIDSerializer()
-        .registerDSFID(DataSerializableFixedID.LUCENE_ENTRY_SCORE, EntryScore.class);
+    registrar.register(DataSerializableFixedID.LUCENE_ENTRY_SCORE, EntryScore.class);
 
-    InternalDataSerializer.getDSFIDSerializer()
-        .registerDSFID(DataSerializableFixedID.LUCENE_TOP_ENTRIES, TopEntries.class);
+    registrar.register(DataSerializableFixedID.LUCENE_TOP_ENTRIES, TopEntries.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(
-        DataSerializableFixedID.LUCENE_TOP_ENTRIES_COLLECTOR,
+    registrar.register(DataSerializableFixedID.LUCENE_TOP_ENTRIES_COLLECTOR,
         TopEntriesCollector.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(
-        DataSerializableFixedID.WAIT_UNTIL_FLUSHED_FUNCTION_CONTEXT,
+    registrar.register(DataSerializableFixedID.WAIT_UNTIL_FLUSHED_FUNCTION_CONTEXT,
         WaitUntilFlushedFunctionContext.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(
-        DataSerializableFixedID.DESTROY_LUCENE_INDEX_MESSAGE,
+    registrar.register(DataSerializableFixedID.DESTROY_LUCENE_INDEX_MESSAGE,
         DestroyLuceneIndexMessage.class);
 
-    InternalDataSerializer.getDSFIDSerializer()
-        .registerDSFID(DataSerializableFixedID.LUCENE_PAGE_RESULTS, PageResults.class);
+    registrar.register(DataSerializableFixedID.LUCENE_PAGE_RESULTS, PageResults.class);
 
-    InternalDataSerializer.getDSFIDSerializer().registerDSFID(
-        DataSerializableFixedID.LUCENE_RESULT_STRUCT,
+    registrar.register(DataSerializableFixedID.LUCENE_RESULT_STRUCT,
         LuceneResultStructImpl.class);
   }
 
@@ -667,7 +658,7 @@ public class LuceneServiceImpl implements InternalLuceneService {
   @Override
   public boolean waitUntilFlushed(String indexName, String regionPath, long timeout, TimeUnit unit)
       throws InterruptedException {
-    Region dataRegion = this.cache.getRegion(regionPath);
+    Region dataRegion = cache.getRegion(regionPath);
     if (dataRegion == null) {
       logger.info("Data region " + regionPath + " not found");
       return false;
@@ -688,7 +679,7 @@ public class LuceneServiceImpl implements InternalLuceneService {
 
   @Override
   public boolean isIndexingInProgress(String indexName, String regionPath) {
-    Region region = this.cache.getRegion(regionPath);
+    Region region = cache.getRegion(regionPath);
     if (region == null) {
       logger.info("Data region " + regionPath + " not found");
       return false;

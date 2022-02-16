@@ -17,6 +17,7 @@ package org.apache.geode.cache.client.internal;
 import java.util.Set;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.InternalGemFireError;
 import org.apache.geode.cache.FixedPartitionAttributes;
@@ -43,7 +44,6 @@ public class GetClientPartitionAttributesOp {
     // no instances allowed
   }
 
-  @SuppressWarnings("unchecked")
   public static ClientPartitionAdvisor execute(ExecutablePool pool, String regionFullPath) {
     AbstractOp op = new GetClientPartitionAttributesOpImpl(regionFullPath);
     if (logger.isDebugEnabled()) {
@@ -84,7 +84,7 @@ public class GetClientPartitionAttributesOp {
 
     @SuppressWarnings("unchecked")
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       switch (msg.getMessageType()) {
         case MessageType.GET_CLIENT_PARTITION_ATTRIBUTES_ERROR:
           String errorMsg = msg.getPart(0).getString();
@@ -138,7 +138,7 @@ public class GetClientPartitionAttributesOp {
           throw new ServerOperationException(s, (Throwable) obj);
         default:
           throw new InternalGemFireError(String.format("Unknown message type %s",
-              Integer.valueOf(msg.getMessageType())));
+              msg.getMessageType()));
       }
     }
 

@@ -37,7 +37,6 @@ import java.util.Set;
 
 import javax.sql.DataSource;
 
-import junitparams.JUnitParamsRunner;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -56,8 +55,9 @@ import org.apache.geode.pdx.PdxInstance;
 import org.apache.geode.pdx.PdxInstanceFactory;
 import org.apache.geode.pdx.internal.PdxInstanceImpl;
 import org.apache.geode.pdx.internal.PdxType;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class SqlHandlerTest {
   private static final String DATA_SOURCE_NAME = "dataSourceName";
   private static final String REGION_NAME = "testRegion";
@@ -126,10 +126,10 @@ public class SqlHandlerTest {
     JdbcConnectorService connectorService = mock(JdbcConnectorService.class);
     when(cache.getService(JdbcConnectorService.class)).thenReturn(connectorService);
 
-    when(dataSource.getConnection()).thenReturn(this.connection);
+    when(dataSource.getConnection()).thenReturn(connection);
 
     statement = mock(PreparedStatement.class);
-    when(this.connection.prepareStatement(any())).thenReturn(statement);
+    when(connection.prepareStatement(any())).thenReturn(statement);
     createSqlHandler();
   }
 
@@ -152,7 +152,7 @@ public class SqlHandlerTest {
   public void createSqlHandlerHandlesSqlExceptionFromGetConnection() throws SQLException {
     doThrow(new SQLException("test exception")).when(dataSource).getConnection();
 
-    assertThatThrownBy(() -> createSqlHandler())
+    assertThatThrownBy(this::createSqlHandler)
         .isInstanceOf(JdbcConnectorException.class).hasMessage(
             "Could not connect to datasource \"dataSourceName\" because: java.sql.SQLException: test exception");
   }
@@ -1012,7 +1012,7 @@ public class SqlHandlerTest {
   @Test
   public void getEntryColumnDataWhenMultipleIdColumnsGivenNonPdxInstanceFails() {
     when(tableMetaDataView.getKeyColumnNames()).thenReturn(Arrays.asList("fieldOne", "fieldTwo"));
-    Object nonCompositeKey = Integer.valueOf(123);
+    Object nonCompositeKey = 123;
 
     assertThatThrownBy(() -> handler.getEntryColumnData(tableMetaDataView, nonCompositeKey, value,
         Operation.DESTROY)).isInstanceOf(JdbcConnectorException.class).hasMessageContaining(

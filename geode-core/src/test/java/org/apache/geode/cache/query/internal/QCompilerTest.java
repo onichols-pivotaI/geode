@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -39,9 +38,10 @@ import org.apache.geode.cache.query.internal.parse.OQLLexerTokenTypes;
 import org.apache.geode.cache.query.security.MethodInvocationAuthorizer;
 import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.test.junit.categories.OQLQueryTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category(OQLQueryTest.class)
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class QCompilerTest {
   private QueryExecutionContext context;
 
@@ -58,77 +58,77 @@ public class QCompilerTest {
   @Test
   public void testStringConditioningForLike_1() {
     String s1 = "abc%";
-    StringBuffer buffer = new StringBuffer(s1);
+    StringBuilder buffer = new StringBuilder(s1);
     CompiledLike cl = new CompiledLike(null, null);
     int wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(3);
     assertThat(buffer.toString()).isEqualTo(s1);
 
     s1 = "abc\\%abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(-1);
     assertThat(buffer.toString()).isEqualTo("abc%abc");
 
     s1 = "abc\\\\%abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(4);
     assertThat(buffer.toString()).isEqualTo("abc\\%abc");
 
     s1 = "abc\\\\\\%abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(-1);
     assertThat(buffer.toString()).isEqualTo("abc\\%abc");
 
     s1 = "%";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(0);
     assertThat(buffer.toString()).isEqualTo(s1);
 
     s1 = "%abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(0);
     assertThat(buffer.toString()).isEqualTo("%abc");
 
     s1 = "%%abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(0);
     assertThat(buffer.toString()).isEqualTo("%%abc");
 
     s1 = "%\\%abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(0);
     assertThat(buffer.toString()).isEqualTo("%\\%abc");
 
     s1 = "_abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
 
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(0);
     assertThat(buffer.toString()).isEqualTo("_abc");
 
     s1 = "\\_abc";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
 
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(-1);
     assertThat(buffer.toString()).isEqualTo("_abc");
 
     s1 = "ab\\%c%d";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
 
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(4);
     assertThat(buffer.toString()).isEqualTo("ab%c%d");
 
     s1 = "ab\\__d";
-    buffer = new StringBuffer(s1);
+    buffer = new StringBuilder(s1);
 
     wildCardPosition = cl.checkIfSargableAndRemoveEscapeChars(context, buffer);
     assertThat(wildCardPosition).isEqualTo(3);
@@ -374,7 +374,7 @@ public class QCompilerTest {
     literal = new CompiledLiteral(s1);
     compiler = new QCompiler();
     result = compiler.createCompiledValueForLikePredicate(var, literal);
-    String lowerBoundKey = "abc" + new String(new char[] {(char) 255});
+    String lowerBoundKey = "abc" + (char) 255;
     validationHelperForCompiledJunction((CompiledJunction) result, lowerBoundKey, "abd");
 
     s1 = "abc"
@@ -429,7 +429,7 @@ public class QCompilerTest {
     String s4 = "[";
     String s5 = "a";
     String s6 = "{";
-    String s7 = new String(new char[] {(char) 255});
+    String s7 = String.valueOf((char) 255);
     assertThat(s2.compareTo(s1) > 0).isTrue();
     assertThat(s3.compareTo(s2) > 0).isTrue();
     assertThat(s4.compareTo(s3) > 0).isTrue();

@@ -14,14 +14,15 @@
  */
 package org.apache.geode.internal;
 
-import java.io.BufferedReader;
+import static org.apache.geode.internal.serialization.filter.SanctionedSerializables.loadSanctionedClassNames;
+import static org.apache.geode.internal.serialization.filter.SanctionedSerializables.loadSanctionedSerializablesServices;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.NotSerializableException;
 import java.io.ObjectInput;
 import java.io.ObjectInputStream;
@@ -40,7 +41,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.net.URL;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
@@ -69,12 +70,12 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 
 import org.apache.geode.CancelException;
 import org.apache.geode.CanonicalInstantiator;
 import org.apache.geode.DataSerializable;
 import org.apache.geode.DataSerializer;
-import org.apache.geode.GemFireConfigException;
 import org.apache.geode.GemFireIOException;
 import org.apache.geode.GemFireRethrowable;
 import org.apache.geode.Instantiator;
@@ -82,14 +83,13 @@ import org.apache.geode.SerializationException;
 import org.apache.geode.SystemFailure;
 import org.apache.geode.ToDataException;
 import org.apache.geode.annotations.Immutable;
+import org.apache.geode.annotations.VisibleForTesting;
 import org.apache.geode.annotations.internal.MakeNotStatic;
 import org.apache.geode.annotations.internal.MutableForTesting;
 import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.execute.Function;
 import org.apache.geode.distributed.internal.ClusterDistributionManager;
 import org.apache.geode.distributed.internal.DMStats;
-import org.apache.geode.distributed.internal.DistributedSystemService;
-import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.InternalDistributedSystem;
 import org.apache.geode.distributed.internal.LonerDistributionManager;
 import org.apache.geode.distributed.internal.SerialDistributionMessage;
@@ -105,13 +105,13 @@ import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
 import org.apache.geode.internal.cache.tier.sockets.OldClientSupportService;
 import org.apache.geode.internal.cache.tier.sockets.Part;
 import org.apache.geode.internal.classloader.ClassPathLoader;
-import org.apache.geode.internal.lang.ClassUtils;
 import org.apache.geode.internal.logging.log4j.LogMarker;
 import org.apache.geode.internal.serialization.BasicSerializable;
 import org.apache.geode.internal.serialization.DSCODE;
 import org.apache.geode.internal.serialization.DSFIDSerializer;
 import org.apache.geode.internal.serialization.DSFIDSerializerFactory;
 import org.apache.geode.internal.serialization.DataSerializableFixedID;
+import org.apache.geode.internal.serialization.DataSerializableFixedIdRegistrant;
 import org.apache.geode.internal.serialization.DeserializationContext;
 import org.apache.geode.internal.serialization.DscodeHelper;
 import org.apache.geode.internal.serialization.KnownVersion;
@@ -121,6 +121,13 @@ import org.apache.geode.internal.serialization.SerializationContext;
 import org.apache.geode.internal.serialization.SerializationVersions;
 import org.apache.geode.internal.serialization.StaticSerialization;
 import org.apache.geode.internal.serialization.VersionedDataStream;
+import org.apache.geode.internal.serialization.filter.NullStreamSerialFilter;
+import org.apache.geode.internal.serialization.filter.ReflectiveFacadeStreamSerialFilterFactory;
+import org.apache.geode.internal.serialization.filter.SanctionedSerializablesService;
+import org.apache.geode.internal.serialization.filter.SerializableObjectConfig;
+import org.apache.geode.internal.serialization.filter.StreamSerialFilter;
+import org.apache.geode.internal.serialization.filter.StreamSerialFilterFactory;
+import org.apache.geode.internal.serialization.filter.UnableToSetSerialFilterException;
 import org.apache.geode.internal.util.concurrent.CopyOnWriteHashMap;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.pdx.NonPortableClassException;
@@ -157,57 +164,82 @@ public abstract class InternalDataSerializer extends DataSerializer {
    */
   @MakeNotStatic
   private static final Map<String, DataSerializer> classesToSerializers = new ConcurrentHashMap<>();
+
   /**
    * This list contains classes that Geode's classes subclass, such as antlr AST classes which are
    * used by our Object Query Language. It also contains certain classes that are DataSerializable
    * but end up being serialized as part of other serializable objects. VersionedObjectList, for
    * instance, is serialized as part of a partial putAll exception object.
+   *
    * <p>
    * Do not java-serialize objects that Geode does not have complete control over. This leaves us
    * open to security attacks such as Gadget Chains and compromises the ability to do a rolling
    * upgrade from one version of Geode to the next.
+   *
    * <p>
-   * In general you shouldn't use java serialization and you should implement
+   * In general, you shouldn't use java serialization, and you should implement
    * DataSerializableFixedID for internal Geode objects. This gives you better control over
    * backward-compatibility.
+   *
    * <p>
-   * Do not add to this list unless absolutely necessary. Instead put your classes either in the
+   * Do not add to this list unless absolutely necessary. Instead, put your classes either in the
    * sanctionedSerializables file for your module or in its excludedClasses file. Run
    * AnalyzeSerializables to generate the content for the file.
+   *
    * <p>
+   * Syntax is documented by the javadocs of {@code ObjectInputFilter.Config.createFilter}. In
+   * Java 8, {@code ObjectInputFilter} is in package {@code sun.misc}. In Java 9 and above, it's
+   * in package {@code java.io}.
    */
   private static final String SANCTIONED_SERIALIZABLES_DEPENDENCIES_PATTERN =
-      "java.**;javax.management.**" + ";javax.print.attribute.EnumSyntax" // used for some old enums
-          + ";antlr.**" // query AST objects
+      // Java
+      "java.**"
 
-          // old Admin API
-          + ";org.apache.commons.modeler.AttributeInfo" + ";org.apache.commons.modeler.FeatureInfo"
+          // JMX
+          + ";javax.management.**"
+
+          // used for some old enums
+          + ";javax.print.attribute.EnumSyntax"
+
+          // Query AST objects
+          + ";antlr.**"
+
+          // old Admin API and old JMX
+          + ";org.apache.commons.modeler.AttributeInfo"
+          + ";org.apache.commons.modeler.FeatureInfo"
           + ";org.apache.commons.modeler.ManagedBean"
           + ";org.apache.geode.distributed.internal.DistributionConfigSnapshot"
           + ";org.apache.geode.distributed.internal.RuntimeDistributionConfigImpl"
           + ";org.apache.geode.distributed.internal.DistributionConfigImpl"
 
-          // WindowedExportFunction, RegionSnapshotService
+          // WindowedExportFunction and RegionSnapshotService
           + ";org.apache.geode.distributed.internal.membership.InternalDistributedMember"
+
           // putAll
-          + ";org.apache.geode.internal.cache.persistence.PersistentMemberID" // putAll
-          + ";org.apache.geode.internal.cache.persistence.DiskStoreID" // putAll
-          + ";org.apache.geode.internal.cache.tier.sockets.VersionedObjectList" // putAll
+          + ";org.apache.geode.internal.cache.persistence.PersistentMemberID"
+          + ";org.apache.geode.internal.cache.persistence.DiskStoreID"
+          + ";org.apache.geode.internal.cache.tier.sockets.VersionedObjectList"
 
           // security services
-          + ";org.apache.shiro.*;org.apache.shiro.authz.*;org.apache.shiro.authc.*"
+          + ";org.apache.shiro.**"
 
           // export logs
-          + ";org.apache.logging.log4j.Level" + ";org.apache.logging.log4j.spi.StandardLevel"
+          + ";org.apache.logging.log4j.Level"
+          + ";org.apache.logging.log4j.spi.StandardLevel"
 
           // jar deployment
-          + ";com.sun.proxy.$Proxy*" + ";com.healthmarketscience.rmiio.RemoteInputStream"
-          + ";javax.rmi.ssl.SslRMIClientSocketFactory" + ";javax.net.ssl.SSLHandshakeException"
-          + ";javax.net.ssl.SSLException;sun.security.validator.ValidatorException"
+          + ";com.sun.proxy.$Proxy*"
+          + ";com.healthmarketscience.rmiio.RemoteInputStream"
+          + ";javax.rmi.ssl.SslRMIClientSocketFactory"
+          + ";javax.net.ssl.SSLHandshakeException"
+          + ";javax.net.ssl.SSLException"
+          + ";sun.security.validator.ValidatorException"
           + ";sun.security.provider.certpath.SunCertPathBuilderException"
 
           // geode-modules
-          + ";org.apache.geode.modules.util.SessionCustomExpiry" + ";";
+          + ";org.apache.geode.modules.util.SessionCustomExpiry"
+          + ";";
+
   private static final String serializationVersionTxt =
       System.getProperty(GeodeGlossary.GEMFIRE_PREFIX + "serializationVersion");
   /**
@@ -259,12 +291,12 @@ public abstract class InternalDataSerializer extends DataSerializer {
       "org.apache.geode.cache.query.internal.cq.ServerCQImpl";
 
   @Immutable
-  private static final InputStreamFilter defaultSerializationFilter = new EmptyInputStreamFilter();
+  private static final StreamSerialFilter defaultSerializationFilter = new NullStreamSerialFilter();
   /**
    * A deserialization filter for ObjectInputStreams
    */
   @MakeNotStatic
-  private static InputStreamFilter serializationFilter = defaultSerializationFilter;
+  private static StreamSerialFilter serializationFilter = defaultSerializationFilter;
   /**
    * support for old GemFire clients and WAN sites - needed to enable moving from GemFire to Geode
    */
@@ -310,6 +342,17 @@ public abstract class InternalDataSerializer extends DataSerializer {
     }).create();
     initializeWellKnownSerializers();
     dsfidFactory = new DSFIDFactory(dsfidSerializer);
+
+    ServiceLoader<DataSerializableFixedIdRegistrant> loaders = ServiceLoader.load(
+        DataSerializableFixedIdRegistrant.class);
+    for (DataSerializableFixedIdRegistrant loader : loaders) {
+      try {
+        loader.register(dsfidSerializer);
+      } catch (Exception ex) {
+        logger.warn("Data serializable fixed ID loader '{}' failed",
+            loader.getClass().getName(), ex);
+      }
+    }
   }
 
   /**
@@ -373,52 +416,34 @@ public abstract class InternalDataSerializer extends DataSerializer {
    * Initializes the optional serialization "accept list" if the user has requested it in the
    * DistributionConfig
    *
-   * @param distributionConfig the DistributedSystem configuration
-   * @param services DistributedSystem services that might have classes to acceptlist
+   * @param config the DistributedSystem configuration
    */
-  public static void initialize(DistributionConfig distributionConfig,
-      Collection<DistributedSystemService> services) {
-    logger.info("initializing InternalDataSerializer with {} services", services.size());
-    if (distributionConfig.getValidateSerializableObjects()) {
-      if (!ClassUtils.isClassAvailable("sun.misc.ObjectInputFilter")
-          && !ClassUtils.isClassAvailable("java.io.ObjectInputFilter")) {
-        throw new GemFireConfigException(
-            "A serialization filter has been specified but this version of Java does not support serialization filters - ObjectInputFilter is not available");
-      }
-      serializationFilter =
-          new ObjectInputStreamFilterWrapper(SANCTIONED_SERIALIZABLES_DEPENDENCIES_PATTERN
-              + distributionConfig.getSerializableObjectFilter() + ";!*", services);
-    } else {
-      clearSerializationFilter();
-    }
-  }
-
-  private static void clearSerializationFilter() {
-    serializationFilter = defaultSerializationFilter;
+  public static void initializeSerializationFilter(SerializableObjectConfig config) {
+    initializeSerializationFilter(config, loadSanctionedSerializablesServices());
   }
 
   /**
-   * {@link DistributedSystemService}s that need to acceptlist Serializable objects can use this to
-   * read them from a file and then return them via
-   * {@link DistributedSystemService#getSerializationAcceptlist}
+   * Initializes the optional serialization "accept list" if the user has requested it in the
+   * DistributionConfig
+   *
+   * @param config the DistributedSystem configuration
+   * @param services SanctionedSerializablesService that might have classes to acceptlist
    */
-  public static Collection<String> loadClassNames(URL sanctionedSerializables) throws IOException {
-    ArrayList<String> result = new ArrayList<>(1000);
-    try (InputStream inputStream = sanctionedSerializables.openStream();
-        InputStreamReader reader = new InputStreamReader(inputStream);
-        BufferedReader in = new BufferedReader(reader)) {
-      String line;
-      while ((line = in.readLine()) != null) {
-        line = line.trim();
-        if (!(line.startsWith("#") || line.startsWith("//"))) {
-          line = line.replaceAll("/", ".");
-          result.add(line.substring(0, line.indexOf(',')));
-        }
-      }
-    }
-    // logger.info("loaded {} class names from {}", result.size(), sanctionedSerializables);
-    return result;
+  @VisibleForTesting
+  public static void initializeSerializationFilter(SerializableObjectConfig config,
+      Collection<SanctionedSerializablesService> services) {
+    logger.info("initializing InternalDataSerializer with {} services", services.size());
 
+    StreamSerialFilterFactory objectInputFilterFactory =
+        new ReflectiveFacadeStreamSerialFilterFactory();
+
+    serializationFilter =
+        objectInputFilterFactory.create(config, loadSanctionedClassNames(services));
+  }
+
+  @TestOnly
+  static void clearSerializationFilter() {
+    serializationFilter = defaultSerializationFilter;
   }
 
   private static SERIALIZATION_VERSION calculateSerializationVersion() {
@@ -1135,7 +1160,7 @@ public abstract class InternalDataSerializer extends DataSerializer {
     Object ds = idsToSerializers.get(holder.getId());
     if (ds instanceof Marker) {
       synchronized (ds) {
-        ((Marker) ds).notifyAll();
+        ds.notifyAll();
       }
     }
 
@@ -2324,7 +2349,6 @@ public abstract class InternalDataSerializer extends DataSerializer {
     }
   }
 
-  @SuppressWarnings("unchecked")
   private static Object readDataSerializable(final DataInput in)
       throws IOException, ClassNotFoundException {
     final Class<?> c = readClass(in);
@@ -2678,7 +2702,14 @@ public abstract class InternalDataSerializer extends DataSerializer {
       }
 
       ObjectInput ois = new DSObjectInputStream(stream);
-      serializationFilter.setFilterOn((ObjectInputStream) ois);
+
+      try {
+        serializationFilter.setFilterOn((ObjectInputStream) ois);
+      } catch (UnableToSetSerialFilterException e) {
+        // maintain existing behavior for validate-serializable-objects
+        throw new UnsupportedOperationException(e);
+      }
+
       if (stream instanceof VersionedDataStream) {
         KnownVersion v = ((VersionedDataStream) stream).getVersion();
         if (KnownVersion.CURRENT != v && v != null) {
@@ -3222,9 +3253,9 @@ public abstract class InternalDataSerializer extends DataSerializer {
     SerializerAttributesHolder() {}
 
     SerializerAttributesHolder(String name, EventID event, ClientProxyMembershipID proxy, int id) {
-      this.className = name;
-      this.eventId = event;
-      this.proxyId = proxy;
+      className = name;
+      eventId = event;
+      proxyId = proxy;
       this.id = id;
     }
 
@@ -3232,25 +3263,25 @@ public abstract class InternalDataSerializer extends DataSerializer {
      * @return String the classname of the data serializer this instance represents.
      */
     public String getClassName() {
-      return this.className;
+      return className;
     }
 
     public EventID getEventId() {
-      return this.eventId;
+      return eventId;
     }
 
     public ClientProxyMembershipID getProxyId() {
-      return this.proxyId;
+      return proxyId;
     }
 
     public int getId() {
-      return this.id;
+      return id;
     }
 
     @Override
     public String toString() {
-      return "SerializerAttributesHolder[name=" + this.className + ",id=" + this.id + ",eventId="
-          + this.eventId + ']';
+      return "SerializerAttributesHolder[name=" + className + ",id=" + id + ",eventId="
+          + eventId + ']';
     }
   }
 
@@ -3279,9 +3310,9 @@ public abstract class InternalDataSerializer extends DataSerializer {
      */
     void setSerializer(DataSerializer serializer) {
       synchronized (this) {
-        this.hasBeenSet = true;
+        hasBeenSet = true;
         this.serializer = serializer;
-        this.notifyAll();
+        notifyAll();
       }
     }
   }
@@ -3314,7 +3345,7 @@ public abstract class InternalDataSerializer extends DataSerializer {
       synchronized (this) {
         boolean firstTime = true;
         long endTime = 0;
-        while (!this.hasBeenSet) {
+        while (!hasBeenSet) {
           if (firstTime) {
             firstTime = false;
             endTime = System.currentTimeMillis() + WAIT_MS;
@@ -3322,7 +3353,7 @@ public abstract class InternalDataSerializer extends DataSerializer {
           try {
             long remainingMs = endTime - System.currentTimeMillis();
             if (remainingMs > 0) {
-              this.wait(remainingMs); // spurious wakeup ok
+              wait(remainingMs); // spurious wakeup ok
             } else {
               // timed out call setSerializer just to make sure that anyone else
               // also waiting on this marker times out also
@@ -3335,7 +3366,7 @@ public abstract class InternalDataSerializer extends DataSerializer {
             return null;
           }
         }
-        return this.serializer;
+        return serializer;
       }
     }
   }
@@ -3360,16 +3391,16 @@ public abstract class InternalDataSerializer extends DataSerializer {
     @Override
     DataSerializer getSerializer() {
       synchronized (this) {
-        while (!this.hasBeenSet) {
+        while (!hasBeenSet) {
           try {
-            this.wait(); // spurious wakeup ok
+            wait(); // spurious wakeup ok
           } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
             // Just return null, let it fail
             return null;
           }
         }
-        return this.serializer;
+        return serializer;
       }
     }
   }
@@ -3407,18 +3438,18 @@ public abstract class InternalDataSerializer extends DataSerializer {
      * DataSerializer} was registered.
      */
     public RegistrationMessage(DataSerializer s) {
-      this.className = s.getClass().getName();
-      this.id = s.getId();
-      this.eventId = (EventID) s.getEventId();
+      className = s.getClass().getName();
+      id = s.getId();
+      eventId = (EventID) s.getEventId();
     }
 
     static String getFullMessage(Throwable t) {
-      StringBuffer sb = new StringBuffer();
+      StringBuilder sb = new StringBuilder();
       getFullMessage(sb, t);
       return sb.toString();
     }
 
-    private static void getFullMessage(StringBuffer sb, Throwable t) {
+    private static void getFullMessage(StringBuilder sb, Throwable t) {
       if (t.getMessage() != null) {
         sb.append(t.getMessage());
       } else {
@@ -3438,12 +3469,12 @@ public abstract class InternalDataSerializer extends DataSerializer {
         // ClientDataSerializerMessage requires list of supported classes.
         Class<? extends DataSerializer> c;
         try {
-          c = getCachedClass(this.className);
+          c = getCachedClass(className);
         } catch (ClassNotFoundException ex) {
           // fixes bug 44112
           logger.warn(
               "Could not load data serializer class {} so both clients of this server and this server will not have this data serializer. Load failed because: {}",
-              this.className, getFullMessage(ex));
+              className, getFullMessage(ex));
           return;
         }
         DataSerializer s;
@@ -3453,24 +3484,24 @@ public abstract class InternalDataSerializer extends DataSerializer {
           // fixes bug 44112
           logger.warn(
               "Could not create an instance of data serializer for class {} so both clients of this server and this server will not have this data serializer. Create failed because: {}",
-              this.className, getFullMessage(ex));
+              className, getFullMessage(ex));
           return;
         }
-        s.setEventId(this.eventId);
+        s.setEventId(eventId);
         try {
           InternalDataSerializer._register(s, false);
         } catch (IllegalArgumentException | IllegalStateException ex) {
           logger.warn(
               "Could not register data serializer for class {} so both clients of this server and this server will not have this data serializer. Registration failed because: {}",
-              this.className, getFullMessage(ex));
+              className, getFullMessage(ex));
         }
       } else {
         try {
-          InternalDataSerializer.register(this.className, false, this.eventId, null, this.id);
+          InternalDataSerializer.register(className, false, eventId, null, id);
         } catch (IllegalArgumentException | IllegalStateException ex) {
           logger.warn(
               "Could not register data serializer for class {} so it will not be available in this JVM. Registration failed because: {}",
-              this.className, getFullMessage(ex));
+              className, getFullMessage(ex));
         }
       }
     }
@@ -3484,9 +3515,9 @@ public abstract class InternalDataSerializer extends DataSerializer {
     public void toData(DataOutput out,
         SerializationContext context) throws IOException {
       super.toData(out, context);
-      DataSerializer.writeNonPrimitiveClassName(this.className, out);
-      out.writeInt(this.id);
-      DataSerializer.writeObject(this.eventId, out);
+      DataSerializer.writeNonPrimitiveClassName(className, out);
+      out.writeInt(id);
+      DataSerializer.writeObject(eventId, out);
     }
 
     @Override
@@ -3494,15 +3525,15 @@ public abstract class InternalDataSerializer extends DataSerializer {
         DeserializationContext context) throws IOException, ClassNotFoundException {
       super.fromData(in, context);
       InternalDataSerializer.checkIn(in);
-      this.className = DataSerializer.readNonPrimitiveClassName(in);
-      this.id = in.readInt();
-      this.eventId = DataSerializer.readObject(in);
+      className = DataSerializer.readNonPrimitiveClassName(in);
+      id = in.readInt();
+      eventId = DataSerializer.readObject(in);
     }
 
     @Override
     public String toString() {
       return String.format("Register DataSerializer %s of class %s",
-          this.id, this.className);
+          id, className);
     }
 
     @Override

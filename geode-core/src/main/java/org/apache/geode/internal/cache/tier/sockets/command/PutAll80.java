@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.DynamicRegionFactory;
 import org.apache.geode.cache.RegionDestroyedException;
@@ -77,8 +79,10 @@ public class PutAll80 extends BaseCommand {
   }
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long startp) throws IOException, InterruptedException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long startp)
+      throws IOException, InterruptedException {
     long start = startp; // copy this since we need to modify it
 
     StringBuilder errMessage = new StringBuilder();
@@ -127,8 +131,8 @@ public class PutAll80 extends BaseCommand {
       // part 1: eventID
       Part eventPart = clientMessage.getPart(1);
       ByteBuffer eventIdPartsBuffer = ByteBuffer.wrap(eventPart.getSerializedForm());
-      long threadId = EventID.readEventIdPartsFromOptmizedByteArray(eventIdPartsBuffer);
-      long sequenceId = EventID.readEventIdPartsFromOptmizedByteArray(eventIdPartsBuffer);
+      long threadId = EventID.readEventIdPartsFromOptimizedByteArray(eventIdPartsBuffer);
+      long sequenceId = EventID.readEventIdPartsFromOptimizedByteArray(eventIdPartsBuffer);
       EventID eventId =
           new EventID(serverConnection.getEventMemberIDByteArray(), threadId, sequenceId);
 
@@ -316,7 +320,8 @@ public class PutAll80 extends BaseCommand {
   }
 
   @Override
-  protected void writeReply(Message origMsg, ServerConnection serverConnection) throws IOException {
+  protected void writeReply(@NotNull Message origMsg, @NotNull ServerConnection serverConnection)
+      throws IOException {
     throw new UnsupportedOperationException();
   }
 

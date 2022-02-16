@@ -26,15 +26,12 @@ import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.StringTokenizer;
@@ -191,11 +188,6 @@ public class InternalDistributedSystem extends DistributedSystem
   protected DistributionManager dm;
 
   private final GrantorRequestProcessor.GrantorRequestContext grc;
-
-  /**
-   * services provided by other modules
-   */
-  private Map<Class, DistributedSystemService> services = new HashMap<>();
 
   private final AtomicReference<ClusterAlertMessaging> clusterAlertMessaging =
       new AtomicReference<>();
@@ -573,7 +565,7 @@ public class InternalDistributedSystem extends DistributedSystem
     alertingSession = AlertingSession.create();
     alertingService = new InternalAlertingServiceFactory().create();
     LoggingUncaughtExceptionHandler
-        .setFailureSetter(error -> SystemFailure.setFailure((VirtualMachineError) error));
+        .setFailureSetter(SystemFailure::setFailure);
     loggingSession = LoggingSession.create();
     originalConfig = config.distributionConfig();
     isReconnectingDS = config.isReconnecting();
@@ -591,7 +583,7 @@ public class InternalDistributedSystem extends DistributedSystem
     statisticsManager =
         statisticsManagerFactory.create(originalConfig.getName(), startTime, statsDisabled);
 
-    this.functionStatsManager = functionStatsManagerFactory.create(statsDisabled, statisticsManager,
+    functionStatsManager = functionStatsManagerFactory.create(statsDisabled, statisticsManager,
         new MeterRegistrySupplier(() -> this));
   }
 
@@ -658,20 +650,6 @@ public class InternalDistributedSystem extends DistributedSystem
   }
 
   /**
-   * Initialize any services that provided as extensions to the cache using the service loader
-   * mechanism.
-   */
-  private void initializeServices() {
-    ServiceLoader<DistributedSystemService> loader =
-        ServiceLoader.load(DistributedSystemService.class);
-    for (DistributedSystemService service : loader) {
-      service.init(this);
-      services.put(service.getInterface(), service);
-    }
-  }
-
-
-  /**
    * Initializes this connection to a distributed system with the current configuration state.
    */
   private void initialize(SecurityManager securityManager, PostProcessor postProcessor,
@@ -736,8 +714,7 @@ public class InternalDistributedSystem extends DistributedSystem
         locatorDMTypeForced = true;
       }
 
-      initializeServices();
-      InternalDataSerializer.initialize(config, services.values());
+      InternalDataSerializer.initializeSerializationFilter(config);
 
       // Initialize the Diffie-Hellman and public/private keys
       try {
@@ -1300,7 +1277,7 @@ public class InternalDistributedSystem extends DistributedSystem
     Thread t = new LoggingThread(dc.toString(), false, () -> {
       try {
         isDisconnectThread.set(Boolean.TRUE);
-        dc.onDisconnect(InternalDistributedSystem.this);
+        dc.onDisconnect(this);
       } catch (CancelException e) {
         if (logger.isDebugEnabled()) {
           logger.debug("Disconnect listener <{}> thwarted by cancellation: {}", dc, e,
@@ -1959,7 +1936,7 @@ public class InternalDistributedSystem extends DistributedSystem
     }
 
     sb.append(" started at ");
-    sb.append((new Date(startTime)).toString());
+    sb.append((new Date(startTime)));
 
     if (!isConnected()) {
       sb.append(" (closed)");
@@ -2106,6 +2083,11 @@ public class InternalDistributedSystem extends DistributedSystem
         logger.warn(t.getMessage(), t);
       }
     }
+  }
+
+  @VisibleForTesting
+  public static void addTestSystem(InternalDistributedSystem internalDistributedSystem) {
+    DistributedSystem.addSystem(internalDistributedSystem);
   }
 
   /**
@@ -2838,13 +2820,13 @@ public class InternalDistributedSystem extends DistributedSystem
             String.format(
                 "A connection to a distributed system already exists in this VM.  It has the "
                     + "following configuration:%s",
-                sb.toString()));
+                sb));
       } else {
         throw new IllegalStateException(
             String.format(
                 "A connection to a distributed system already exists in this VM.  It has the "
                     + "following configuration:%s",
-                sb.toString()),
+                sb),
             creationStack);
       }
     }
@@ -2996,7 +2978,7 @@ public class InternalDistributedSystem extends DistributedSystem
     private final Properties configProperties;
 
     private SecurityConfig securityConfig;
-    private MetricsService.Builder metricsServiceBuilder;
+    private final MetricsService.Builder metricsServiceBuilder;
 
     private MembershipLocator<InternalDistributedMember> locator;
 

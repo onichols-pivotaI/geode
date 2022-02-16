@@ -297,8 +297,8 @@ class SerializableObject implements Serializable {
     if (!(obj instanceof SerializableObject)) {
       return false;
     }
-    return this.str.equals(((SerializableObject) obj).str)
-        && this.i == ((SerializableObject) obj).i;
+    return str.equals(((SerializableObject) obj).str)
+        && i == ((SerializableObject) obj).i;
   }
 
   @Override

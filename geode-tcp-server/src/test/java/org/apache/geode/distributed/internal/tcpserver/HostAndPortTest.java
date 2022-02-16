@@ -49,7 +49,7 @@ public class HostAndPortTest {
    * Test that getSocketInentAddress returns unresolved InetSocketAddress
    */
   @Test
-  public void getSocketInentAddress_returns_unresolved_SocketAddress() {
+  public void getSocketInetAddress_returns_unresolved_SocketAddress() {
     HostAndPort locator1 = new HostAndPort("fakelocalhost", 8090);
 
     InetSocketAddress actual = locator1.getSocketInetAddress();
@@ -57,6 +57,18 @@ public class HostAndPortTest {
     assertThat(actual.isUnresolved())
         .as("Hostname resolved unexpectedly. Check for DNS hijacking in addition to code errors.")
         .isTrue();
+  }
+
+  @Test
+  public void cachesSocketAddressForIP() {
+    HostAndPort hostAndPort = new HostAndPort("127.0.0.1", 8080);
+    assertThat(hostAndPort.getSocketInetAddress()).isSameAs(hostAndPort.getSocketInetAddress());
+  }
+
+  @Test
+  public void doesNotCacheSocketAddressForHostname() {
+    HostAndPort hostAndPort = new HostAndPort("localhost", 8080);
+    assertThat(hostAndPort.getSocketInetAddress()).isNotSameAs(hostAndPort.getSocketInetAddress());
   }
 
   /**
@@ -117,7 +129,7 @@ public class HostAndPortTest {
   @Test
   public void testSerializationWithNumericAddress() throws IOException, ClassNotFoundException {
     DSFIDSerializer dsfidSerializer = new DSFIDSerializerFactory().create();
-    dsfidSerializer.registerDSFID(HOST_AND_PORT, HostAndPort.class);
+    dsfidSerializer.register(HOST_AND_PORT, HostAndPort.class);
     HostAndPort hostAndPort1 = new HostAndPort("127.0.0.1", 8091);
     BufferDataOutputStream out = new BufferDataOutputStream(100, KnownVersion.CURRENT);
     dsfidSerializer.getObjectSerializer().writeObject(hostAndPort1, out);
@@ -131,7 +143,7 @@ public class HostAndPortTest {
   public void testSerializationWithUnresolvableHostName()
       throws IOException, ClassNotFoundException {
     DSFIDSerializer dsfidSerializer = new DSFIDSerializerFactory().create();
-    dsfidSerializer.registerDSFID(HOST_AND_PORT, HostAndPort.class);
+    dsfidSerializer.register(HOST_AND_PORT, HostAndPort.class);
     HostAndPort hostAndPort1 = new HostAndPort("unresolvable host name", 8091);
     BufferDataOutputStream out = new BufferDataOutputStream(100, KnownVersion.CURRENT);
     dsfidSerializer.getObjectSerializer().writeObject(hostAndPort1, out);
@@ -151,7 +163,7 @@ public class HostAndPortTest {
   @Test
   public void testSerializationWithNoHostName() throws IOException, ClassNotFoundException {
     DSFIDSerializer dsfidSerializer = new DSFIDSerializerFactory().create();
-    dsfidSerializer.registerDSFID(HOST_AND_PORT, HostAndPort.class);
+    dsfidSerializer.register(HOST_AND_PORT, HostAndPort.class);
     HostAndPort hostAndPort1 = new HostAndPort(null, 8091);
     BufferDataOutputStream out = new BufferDataOutputStream(100, KnownVersion.CURRENT);
     dsfidSerializer.getObjectSerializer().writeObject(hostAndPort1, out);

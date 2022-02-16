@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.cache.query.CqException;
 import org.apache.geode.cache.query.internal.cq.CqService;
 import org.apache.geode.cache.query.internal.cq.InternalCqQuery;
@@ -31,6 +33,7 @@ import org.apache.geode.internal.cache.tier.sockets.Message;
 import org.apache.geode.internal.cache.tier.sockets.ServerConnection;
 import org.apache.geode.internal.security.AuthorizeRequest;
 import org.apache.geode.internal.security.SecurityService;
+import org.apache.geode.security.AuthenticationExpiredException;
 import org.apache.geode.security.ResourcePermission.Operation;
 import org.apache.geode.security.ResourcePermission.Resource;
 import org.apache.geode.security.ResourcePermission.Target;
@@ -48,8 +51,9 @@ public class StopCQ extends BaseCQCommand {
   }
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start) throws IOException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start) throws IOException {
     CachedRegionHelper crHelper = serverConnection.getCachedRegionHelper();
     ClientProxyMembershipID id = serverConnection.getProxyID();
     CacheServerStats stats = serverConnection.getCacheServerStats();
@@ -109,6 +113,9 @@ public class StopCQ extends BaseCQCommand {
     } catch (CqException cqe) {
       sendCqResponse(MessageType.CQ_EXCEPTION_TYPE, "", clientMessage.getTransactionId(), cqe,
           serverConnection);
+      return;
+    } catch (AuthenticationExpiredException e) {
+      writeChunkedException(clientMessage, e, serverConnection);
       return;
     } catch (Exception e) {
       String err =

@@ -17,7 +17,7 @@ package org.apache.geode.rest.internal.web.util;
 
 import org.springframework.util.StringUtils;
 
-import org.apache.geode.internal.lang.ClassUtils;
+import org.apache.geode.internal.lang.utils.ClassUtils;
 
 /**
  * The NumberUtils class is a utility class for working with numbers.
@@ -43,7 +43,7 @@ public abstract class NumberUtils {
 
   public static Long longValue(final Object value) {
     if (value instanceof Number) {
-      return Long.valueOf(((Number) value).longValue());
+      return ((Number) value).longValue();
     }
     return parseLong(String.valueOf(value));
   }

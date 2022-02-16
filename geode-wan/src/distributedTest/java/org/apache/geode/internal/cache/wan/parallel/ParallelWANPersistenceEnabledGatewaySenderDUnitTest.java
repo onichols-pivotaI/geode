@@ -14,10 +14,14 @@
  */
 package org.apache.geode.internal.cache.wan.parallel;
 
+import static org.apache.geode.test.awaitility.GeodeAwaitility.getTimeout;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
+import org.apache.logging.log4j.Logger;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -27,8 +31,13 @@ import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionFactory;
 import org.apache.geode.cache.wan.GatewaySender;
 import org.apache.geode.cache.wan.GatewaySenderFactory;
+import org.apache.geode.distributed.internal.ClusterDistributionManager;
+import org.apache.geode.distributed.internal.DistributionMessage;
+import org.apache.geode.distributed.internal.DistributionMessageObserver;
 import org.apache.geode.internal.cache.ColocationHelper;
+import org.apache.geode.internal.cache.DestroyPartitionedRegionMessage;
 import org.apache.geode.internal.cache.wan.WANTestBase;
+import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.test.dunit.AsyncInvocation;
 import org.apache.geode.test.dunit.IgnoredException;
 import org.apache.geode.test.dunit.LogWriterUtils;
@@ -39,6 +48,7 @@ import org.apache.geode.test.junit.categories.WanTest;
 public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTestBase {
 
   private static final long serialVersionUID = 1L;
+  private static final Logger logger = LogService.getLogger();
 
   public ParallelWANPersistenceEnabledGatewaySenderDUnitTest() {
     super();
@@ -53,8 +63,8 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPartitionedRegionWithGatewaySenderPersistenceEnabled() throws IOException {
     try {
-      Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
-      Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+      Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+      Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
       createCache(lnPort);
       GatewaySenderFactory fact = cache.createGatewaySenderFactory();
       fact.setPersistenceEnabled(true);
@@ -87,8 +97,8 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
    */
   @Test
   public void testPersistentPartitionedRegionWithGatewaySenderPersistenceEnabled() {
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     createCacheInVMs(nyPort, vm2, vm3);
     createReceiverInVMs(vm2, vm3);
@@ -129,8 +139,8 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Category({WanTest.class})
   @Test
   public void testPartitionedRegionWithPersistentGatewaySender() {
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     createCacheInVMs(nyPort, vm2, vm3);
     createReceiverInVMs(vm2, vm3);
@@ -185,9 +195,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPRWithGatewaySenderPersistenceEnabled_Restart() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -197,13 +207,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -304,7 +314,7 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   }
 
   protected SerializableRunnableIF killSenderRunnable() {
-    return () -> WANTestBase.killSender();
+    return WANTestBase::killSender;
   }
 
   protected SerializableRunnableIF pauseSenderRunnable() {
@@ -313,6 +323,10 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
 
   protected SerializableRunnableIF waitForSenderRunnable() {
     return () -> WANTestBase.waitForSenderRunningState("ln");
+  }
+
+  private SerializableRunnableIF waitForSenderNonRunnable() {
+    return () -> WANTestBase.waitForSenderNonRunningState("ln");
   }
 
   /**
@@ -324,9 +338,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPRWithGatewaySenderPersistenceEnabled_Restart() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -336,13 +350,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -459,21 +473,21 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPRWithGatewaySenderPersistenceEnabled_Restart2() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create cache in local site
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, false));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, false));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, false));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, false));
 
     LogWriterUtils.getLogWriter()
@@ -610,9 +624,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPRWithGatewaySenderPersistenceEnabled_Restart_Scenario2() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -621,13 +635,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -752,9 +766,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPRWithPersistentGatewaySender_Restart_Bug44275() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -764,13 +778,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -887,9 +901,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPRWithPersistentGatewaySender_Restart_DoOps() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -898,13 +912,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -1019,7 +1033,7 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPR_Restart() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
 
     // create cache in local site
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
@@ -1101,9 +1115,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPartitionedRegionWithGatewaySenderPersistenceEnabled_Restart2() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -1113,13 +1127,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -1219,9 +1233,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testNonPersistentPartitionedRegionWithGatewaySenderPersistenceEnabled_Restart() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -1231,13 +1245,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -1340,9 +1354,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testPersistentPartitionedRegionWithGatewaySender_Restart() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -1469,9 +1483,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testParallelPropagationWithSenderPersistenceEnabledForAccessor() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -1519,8 +1533,8 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
 
 
     try {
-      Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
-      Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+      Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+      Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
       createCacheInVMs(nyPort, vm2, vm3);
       createReceiverInVMs(vm2, vm3);
@@ -1608,9 +1622,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testpersistentWanGateway_restartSender_expectAllEventsReceived() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -1620,13 +1634,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -1703,9 +1717,9 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   @Test
   public void testpersistentWanGateway_restartSenderWithCleanQueues_expectNoEventsReceived() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create cache in remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -1714,13 +1728,13 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -1777,10 +1791,7 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
 
     LogWriterUtils.getLogWriter().info("Start all the senders.");
 
-    vm4.invoke(() -> WANTestBase.startSenderwithCleanQueues("ln"));
-    vm5.invoke(() -> WANTestBase.startSenderwithCleanQueues("ln"));
-    vm6.invoke(() -> WANTestBase.startSenderwithCleanQueues("ln"));
-    vm7.invoke(() -> WANTestBase.startSenderwithCleanQueues("ln"));
+    startSenderwithCleanQueuesInVMsAsync("ln", vm4, vm5, vm6, vm7);
 
     LogWriterUtils.getLogWriter().info("Waiting for senders running.");
     // wait for senders running
@@ -1801,14 +1812,117 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
   /**
    * Enable persistence for GatewaySender. Pause the sender and do some puts in local region. Stop
    * GatewaySender.
+   * Then start GatewaySender with clean-queues option.
+   * After that insert new puts.
+   * Check if the remote site receives all the events.
+   */
+  @Test
+  public void testpersistentWanGateway_restartSenderWithCleanQueues_andPutsAfter() {
+    // create locator on local site
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    // create locator on remote site
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+
+    // create cache in remote site
+    createCacheInVMs(nyPort, vm2, vm3);
+
+    // create cache in local site
+    createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
+
+    // create senders with disk store
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+
+    LogWriterUtils.getLogWriter()
+        .info("The DS are: " + diskStore1 + "," + diskStore2 + "," + diskStore3 + "," + diskStore4);
+
+    // create PR on remote site
+    vm2.invoke(
+        () -> WANTestBase.createPartitionedRegion(getTestMethodName(), null, 1, 1000, isOffHeap()));
+    vm3.invoke(
+        () -> WANTestBase.createPartitionedRegion(getTestMethodName(), null, 1, 1000, isOffHeap()));
+
+    // create PR on local site
+    vm4.invoke(createPartitionedRegionRunnable());
+    vm5.invoke(createPartitionedRegionRunnable());
+    vm6.invoke(createPartitionedRegionRunnable());
+    vm7.invoke(createPartitionedRegionRunnable());
+
+    // start the senders on local site
+    startSenderInVMs("ln", vm4, vm5, vm6, vm7);
+
+    // wait for senders to become running
+    vm4.invoke(waitForSenderRunnable());
+    vm5.invoke(waitForSenderRunnable());
+    vm6.invoke(waitForSenderRunnable());
+    vm7.invoke(waitForSenderRunnable());
+
+    LogWriterUtils.getLogWriter().info("All senders are running.");
+
+    // start puts in region on local site
+    vm4.invoke(() -> WANTestBase.doPuts(getTestMethodName(), 3000));
+    LogWriterUtils.getLogWriter().info("Completed puts in the region");
+
+
+    vm2.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+    vm3.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+    LogWriterUtils.getLogWriter().info("Check that no events are propagated to remote site");
+
+    // --------------------close and rebuild local site
+    // -------------------------------------------------
+    // stop the senders
+
+    vm4.invoke(() -> WANTestBase.stopSender("ln"));
+    vm5.invoke(() -> WANTestBase.stopSender("ln"));
+    vm6.invoke(() -> WANTestBase.stopSender("ln"));
+    vm7.invoke(() -> WANTestBase.stopSender("ln"));
+
+    LogWriterUtils.getLogWriter().info("Stopped all the senders.");
+
+    // create receiver on remote site
+    createReceiverInVMs(vm2, vm3);
+
+    vm2.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+    vm3.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+
+    LogWriterUtils.getLogWriter().info("Start all the senders.");
+    startSenderwithCleanQueuesInVMsAsync("ln", vm4, vm5, vm6, vm7);
+
+    LogWriterUtils.getLogWriter().info("Waiting for senders running.");
+    // wait for senders running
+    vm4.invoke(waitForSenderRunnable());
+    vm5.invoke(waitForSenderRunnable());
+    vm6.invoke(waitForSenderRunnable());
+    vm7.invoke(waitForSenderRunnable());
+
+    // start puts in region on local site
+    vm4.invoke(() -> WANTestBase.doPuts(getTestMethodName(), 5000));
+    LogWriterUtils.getLogWriter().info("Completed puts in the region");
+
+    // ----------------------------------------------------------------------------------------------------
+
+    vm2.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 5000));
+    vm3.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 5000));
+  }
+
+
+  /**
+   * Enable persistence for GatewaySender. Pause the sender and do some puts in local region. Stop
+   * GatewaySender.
    * Then start GatewaySender. Check if the remote site receives all the events.
    */
   @Test
   public void testpersistentWanGateway_restartSender_expectAllEventsReceived_scenario2() {
     // create locator on local site
-    Integer lnPort = (Integer) vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
     // create locator on remote site
-    Integer nyPort = (Integer) vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
 
     // create receiver on remote site
     createCacheInVMs(nyPort, vm2, vm3);
@@ -1818,11 +1932,11 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     createCacheInVMs(lnPort, vm4, vm5, vm6);
 
     // create senders with disk store
-    String diskStore1 = (String) vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore2 = (String) vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
-    String diskStore3 = (String) vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     LogWriterUtils.getLogWriter()
@@ -1870,12 +1984,12 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
 
     vm7.invoke(() -> createCache(lnPort));
 
-    String diskStore4 = (String) vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
         true, 100, 10, false, true, null, null, true));
 
     vm7.invoke(createPartitionedRegionRunnable());
 
-    vm7.invoke(() -> WANTestBase.startSenderwithCleanQueues("ln"));
+    vm7.invoke(() -> WANTestBase.startSender("ln"));
 
     vm7.invoke(waitForSenderRunnable());
 
@@ -1983,6 +2097,150 @@ public class ParallelWANPersistenceEnabledGatewaySenderDUnitTest extends WANTest
     vm3.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 10));
   }
 
+
+  /**
+   * Enable persistence for GatewaySender. Pause the sender and do some puts in local region. Stop
+   * GatewaySender.
+   * Then start GatewaySender with clean-queues option. Check if the remote site receives all the
+   * events.
+   */
+  @Test
+  public void testpersistentWanGateway_restartSenderWithCleanQueuesDelayed_expectNoEventsReceived()
+      throws InterruptedException {
+    // create locator on local site
+    Integer lnPort = vm0.invoke(() -> WANTestBase.createFirstLocatorWithDSId(1));
+    // create locator on remote site
+    Integer nyPort = vm1.invoke(() -> WANTestBase.createFirstRemoteLocator(2, lnPort));
+
+    // create cache in remote site
+    createCacheInVMs(nyPort, vm2, vm3);
+
+    // create cache in local site
+    createCacheInVMs(lnPort, vm4, vm5, vm6, vm7);
+
+    // create senders with disk store
+    String diskStore1 = vm4.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+    String diskStore2 = vm5.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+    String diskStore3 = vm6.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+    String diskStore4 = vm7.invoke(() -> WANTestBase.createSenderWithDiskStore("ln", 2,
+        true, 100, 10, false, true, null, null, true));
+
+    logger
+        .info("The DS are: " + diskStore1 + "," + diskStore2 + "," + diskStore3 + "," + diskStore4);
+
+    // create PR on remote site
+    vm2.invoke(
+        () -> WANTestBase.createPartitionedRegion(getTestMethodName(), null, 1, 100, isOffHeap()));
+    vm3.invoke(
+        () -> WANTestBase.createPartitionedRegion(getTestMethodName(), null, 1, 100, isOffHeap()));
+
+    // create PR on local site
+    vm4.invoke(createPartitionedRegionRunnable());
+    vm5.invoke(createPartitionedRegionRunnable());
+    vm6.invoke(createPartitionedRegionRunnable());
+    vm7.invoke(createPartitionedRegionRunnable());
+
+    vm7.invoke(() -> {
+      DistributionMessageObserver.setInstance(new BlockingDestroyRegionObserver());
+    });
+
+    // start the senders on local site
+    startSenderInVMs("ln", vm4, vm5, vm6, vm7);
+
+    // wait for senders to become running
+    vm4.invoke(waitForSenderRunnable());
+    vm5.invoke(waitForSenderRunnable());
+    vm6.invoke(waitForSenderRunnable());
+    vm7.invoke(waitForSenderRunnable());
+
+    logger.info("All senders are running.");
+
+    // start puts in region on local site
+    vm4.invoke(() -> WANTestBase.doPuts(getTestMethodName(), 3000));
+    logger.info("Completed puts in the region");
+
+
+    vm2.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+    vm3.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+    logger.info("Check that no events are propagated to remote site");
+
+    // --------------------close and rebuild local site
+    // -------------------------------------------------
+    // stop the senders
+
+    vm4.invoke(() -> WANTestBase.stopSender("ln"));
+    vm5.invoke(() -> WANTestBase.stopSender("ln"));
+    vm6.invoke(() -> WANTestBase.stopSender("ln"));
+    vm7.invoke(() -> WANTestBase.stopSender("ln"));
+
+    logger.info("Stopped all the senders.");
+
+    // wait for senders to stop
+    vm4.invoke(waitForSenderNonRunnable());
+    vm5.invoke(waitForSenderNonRunnable());
+    vm6.invoke(waitForSenderNonRunnable());
+    vm7.invoke(waitForSenderNonRunnable());
+
+    // create receiver on remote site
+    createReceiverInVMs(vm2, vm3);
+
+    vm2.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+    vm3.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+
+    logger.info("Start all the senders.");
+
+    AsyncInvocation<Void> startSenderwithCleanQueuesInVM4 =
+        vm4.invokeAsync(() -> startSenderwithCleanQueues("ln"));
+
+    AsyncInvocation<Void> startSenderwithCleanQueuesInVM5 =
+        vm5.invokeAsync(() -> startSenderwithCleanQueues("ln"));
+    AsyncInvocation<Void> startSenderwithCleanQueuesInVM6 =
+        vm6.invokeAsync(() -> startSenderwithCleanQueues("ln"));
+    AsyncInvocation<Void> waitForConditionInVM7 = vm7.invokeAsync(() -> {
+      BlockingDestroyRegionObserver observer =
+          (BlockingDestroyRegionObserver) DistributionMessageObserver.getInstance();
+      observer.startedBlocking.await(getTimeout().toMinutes(), TimeUnit.MINUTES);
+    });
+
+    waitForConditionInVM7.await();
+
+
+    AsyncInvocation<Void> startSenderwithCleanQueuesInVM7 =
+        vm7.invokeAsync(() -> startSenderwithCleanQueues("ln"));
+
+    startSenderwithCleanQueuesInVM4.await();
+    startSenderwithCleanQueuesInVM5.await();
+    startSenderwithCleanQueuesInVM6.await();
+    startSenderwithCleanQueuesInVM7.await();
+
+    logger.info("Waiting for senders running.");
+    // wait for senders running
+    vm4.invoke(waitForSenderRunnable());
+    vm5.invoke(waitForSenderRunnable());
+    vm6.invoke(waitForSenderRunnable());
+    vm7.invoke(waitForSenderRunnable());
+
+    logger.info("All the senders are now running...");
+
+    // ----------------------------------------------------------------------------------------------------
+
+    vm2.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+    vm3.invoke(() -> WANTestBase.validateRegionSize(getTestMethodName(), 0));
+  }
+
+  private static class BlockingDestroyRegionObserver extends DistributionMessageObserver {
+    private final CountDownLatch startedBlocking = new CountDownLatch(1);
+
+    @Override
+    public void beforeProcessMessage(ClusterDistributionManager dm, DistributionMessage message) {
+      if (message instanceof DestroyPartitionedRegionMessage) {
+        startedBlocking.countDown();
+      }
+    }
+  }
 
   /**
    * setIgnoreQueue has lots of callers by reflection

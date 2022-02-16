@@ -16,6 +16,8 @@ package org.apache.geode.cache.client.internal;
 
 import java.io.IOException;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.Instantiator;
 import org.apache.geode.SerializationException;
 import org.apache.geode.internal.InternalInstantiator.InstantiatorAttributesHolder;
@@ -69,8 +71,7 @@ public class RegisterInstantiatorsOp {
      */
     public RegisterInstantiatorsOpImpl(Instantiator[] instantiators, EventID eventId) {
       super(MessageType.REGISTER_INSTANTIATORS, instantiators.length * 3 + 1);
-      for (int i = 0; i < instantiators.length; i++) {
-        Instantiator instantiator = instantiators[i];
+      for (Instantiator instantiator : instantiators) {
         // strip '.class' off these class names
         String className = instantiator.getClass().toString().substring(6);
         String instantiatedClassName = instantiator.getInstantiatedClass().toString().substring(6);
@@ -125,7 +126,7 @@ public class RegisterInstantiatorsOp {
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       processAck(msg, "registerInstantiators");
       return null;
     }

@@ -25,7 +25,7 @@ import me.champeau.gradle.japicmp.report.Severity
 class AllowMajorBreakingChanges extends AbstractRecordingSeenMembers {
   @Override
   Violation maybeAddViolation(final JApiCompatibility member) {
-    if (!member.isBinaryCompatible()) {
+    if (!member.isBinaryCompatible() || !member.isSourceCompatible()) {
       return Violation.notBinaryCompatible(member, Severity.warning)
     } else {
       return null

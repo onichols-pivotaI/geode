@@ -21,6 +21,8 @@ import java.util.HashSet;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.execute.Function;
@@ -46,7 +48,6 @@ import org.apache.geode.internal.cache.tier.sockets.Part;
 import org.apache.geode.internal.cache.tier.sockets.ServerConnection;
 import org.apache.geode.internal.security.AuthorizeRequest;
 import org.apache.geode.internal.security.SecurityService;
-import org.apache.geode.internal.serialization.KnownVersion;
 
 /**
  * @since GemFire 6.5
@@ -64,8 +65,9 @@ public class ExecuteRegionFunctionSingleHop extends BaseCommand {
   private ExecuteRegionFunctionSingleHop() {}
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start) throws IOException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start) throws IOException {
 
     String regionName = null;
     Object function = null;
@@ -84,8 +86,7 @@ public class ExecuteRegionFunctionSingleHop extends BaseCommand {
     try {
       byte[] bytes = clientMessage.getPart(0).getSerializedForm();
       functionState = bytes[0];
-      if (bytes.length >= 5
-          && serverConnection.getClientVersion().ordinal() >= KnownVersion.GFE_8009.ordinal()) {
+      if (bytes.length >= 5) {
         functionTimeout = Part.decodeInt(bytes, 1);
       }
       if (functionState != 1) {
@@ -112,7 +113,7 @@ public class ExecuteRegionFunctionSingleHop extends BaseCommand {
         filter = new HashSet();
         bucketIdsSize = clientMessage.getPart(6).getInt();
         if (bucketIdsSize != 0) {
-          buckets = new HashSet<Integer>();
+          buckets = new HashSet<>();
           partNumber = 7;
           for (int i = 0; i < bucketIdsSize; i++) {
             buckets.add(clientMessage.getPart(partNumber + i).getInt());
@@ -122,7 +123,7 @@ public class ExecuteRegionFunctionSingleHop extends BaseCommand {
       } else {
         filterSize = clientMessage.getPart(6).getInt();
         if (filterSize != 0) {
-          filter = new HashSet<Object>();
+          filter = new HashSet<>();
           partNumber = 7;
           for (int i = 0; i < filterSize; i++) {
             filter.add(clientMessage.getPart(partNumber + i).getStringOrObject());
@@ -135,7 +136,7 @@ public class ExecuteRegionFunctionSingleHop extends BaseCommand {
       removedNodesSize = clientMessage.getPart(partNumber).getInt();
 
       if (removedNodesSize != 0) {
-        removedNodesSet = new HashSet<Object>();
+        removedNodesSet = new HashSet<>();
         partNumber = partNumber + 1;
 
         for (int i = 0; i < removedNodesSize; i++) {
@@ -234,7 +235,7 @@ public class ExecuteRegionFunctionSingleHop extends BaseCommand {
         Set<Integer> actualBucketSet = pr.getRegionAdvisor().getBucketSet();
         try {
           buckets.retainAll(actualBucketSet);
-        } catch (NoSuchElementException done) {
+        } catch (NoSuchElementException ignored) {
         }
         if (buckets.isEmpty()) {
           throw new FunctionException("Buckets are null");

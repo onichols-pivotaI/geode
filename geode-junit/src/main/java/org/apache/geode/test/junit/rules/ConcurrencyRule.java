@@ -32,8 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.base.Stopwatch;
 import org.junit.rules.ErrorCollector;
+import org.junit.rules.ExternalResource;
 
-import org.apache.geode.test.junit.rules.serializable.SerializableExternalResource;
 
 /**
  * A rule for testing using multiple threads. This rule should not be used as a class rule. This
@@ -73,7 +73,7 @@ import org.apache.geode.test.junit.rules.serializable.SerializableExternalResour
  * </code>
  * </pre>
  */
-public class ConcurrencyRule extends SerializableExternalResource {
+public class ConcurrencyRule extends ExternalResource {
 
   private final ExecutorService threadPool = Executors.newCachedThreadPool();
   private final Collection<ConcurrentOperation> toInvoke;
@@ -251,7 +251,7 @@ public class ConcurrencyRule extends SerializableExternalResource {
     private final int DEFAULT_ITERATIONS = 1;
     private final Duration DEFAULT_DURATION = Duration.ofSeconds(300);
 
-    private Callable<T> callable;
+    private final Callable<T> callable;
     private int iterations;
     private Duration duration;
     private Boolean expectedResultIsSet;
@@ -265,7 +265,7 @@ public class ConcurrencyRule extends SerializableExternalResource {
       callable = null;
       iterations = DEFAULT_ITERATIONS;
       duration = DEFAULT_DURATION;
-      this.expectedResultIsSet = false;
+      expectedResultIsSet = false;
       expectedException = null;
       expectedExceptionType = null;
       expectedExceptionCauseType = null;
@@ -274,10 +274,10 @@ public class ConcurrencyRule extends SerializableExternalResource {
     }
 
     public ConcurrentOperation(Callable<T> toAdd) {
-      this.callable = toAdd;
+      callable = toAdd;
       iterations = DEFAULT_ITERATIONS;
       duration = DEFAULT_DURATION;
-      this.expectedResultIsSet = false;
+      expectedResultIsSet = false;
       expectedException = null;
       expectedExceptionType = null;
       expectedExceptionCauseType = null;
@@ -328,13 +328,13 @@ public class ConcurrencyRule extends SerializableExternalResource {
      * @return this, the ConcurrentOperation (containing a callable) that has been set to repeat
      */
     public ConcurrentOperation repeatUntilValue(T expectedValue) {
-      if (this.expectedResultIsSet) {
+      if (expectedResultIsSet) {
         throw new IllegalArgumentException("Specify only one expected outcome.");
       }
 
-      this.eventualExpectedValueSet = true;
+      eventualExpectedValueSet = true;
       this.expectedValue = expectedValue;
-      this.expectedResultIsSet = true;
+      expectedResultIsSet = true;
       return this;
     }
 
@@ -354,7 +354,7 @@ public class ConcurrencyRule extends SerializableExternalResource {
       }
 
       this.expectedException = expectedException;
-      this.expectedResultIsSet = true;
+      expectedResultIsSet = true;
       return this;
     }
 
@@ -371,7 +371,7 @@ public class ConcurrencyRule extends SerializableExternalResource {
       }
 
       this.expectedExceptionType = expectedExceptionType;
-      this.expectedResultIsSet = true;
+      expectedResultIsSet = true;
       return this;
     }
 
@@ -389,7 +389,7 @@ public class ConcurrencyRule extends SerializableExternalResource {
       }
 
       this.expectedExceptionCauseType = expectedExceptionCauseType;
-      this.expectedResultIsSet = true;
+      expectedResultIsSet = true;
       return this;
     }
 
@@ -401,12 +401,12 @@ public class ConcurrencyRule extends SerializableExternalResource {
      * @return this, the ConcurrentOperation (containing a callable) that has been set to repeat
      */
     public ConcurrentOperation expectValue(T expectedValue) {
-      if (this.expectedResultIsSet) {
+      if (expectedResultIsSet) {
         throw new IllegalArgumentException("Specify only one expected outcome.");
       }
 
       this.expectedValue = expectedValue;
-      this.expectedResultIsSet = true;
+      expectedResultIsSet = true;
       return this;
     }
 
@@ -433,7 +433,7 @@ public class ConcurrencyRule extends SerializableExternalResource {
       try {
         do {
           numRuns++;
-          retVal = this.callable.call();
+          retVal = callable.call();
 
           if (eventualExpectedValueSet && retVal.equals(expectedValue)) {
             return;
@@ -442,22 +442,22 @@ public class ConcurrencyRule extends SerializableExternalResource {
             && ((iterations != DEFAULT_ITERATIONS && numRuns < iterations)
                 || (timeRun.elapsed(SECONDS) <= duration.getSeconds())));
 
-        if (this.expectedValue != null) {
-          assertThat(retVal).isEqualTo(this.expectedValue);
+        if (expectedValue != null) {
+          assertThat(retVal).isEqualTo(expectedValue);
         }
       } catch (Exception e) {
         exception = e;
       }
 
-      if (this.expectedExceptionCauseType != null && this.expectedExceptionType != null) {
-        assertThat(exception).isInstanceOf(this.expectedExceptionType)
-            .hasCauseInstanceOf(this.expectedExceptionCauseType);
-      } else if (this.expectedExceptionType != null) {
-        assertThat(exception).isInstanceOf(this.expectedExceptionType);
-      } else if (this.expectedExceptionCauseType != null) {
-        assertThat(exception).hasCauseInstanceOf(this.expectedExceptionCauseType);
-      } else if (this.expectedException != null) {
-        checkThrown(exception, this.expectedException);
+      if (expectedExceptionCauseType != null && expectedExceptionType != null) {
+        assertThat(exception).isInstanceOf(expectedExceptionType)
+            .hasCauseInstanceOf(expectedExceptionCauseType);
+      } else if (expectedExceptionType != null) {
+        assertThat(exception).isInstanceOf(expectedExceptionType);
+      } else if (expectedExceptionCauseType != null) {
+        assertThat(exception).hasCauseInstanceOf(expectedExceptionCauseType);
+      } else if (expectedException != null) {
+        checkThrown(exception, expectedException);
       } else {
         if (exception != null) {
           throw exception; // rethrow if we weren't expecting any exception and got one

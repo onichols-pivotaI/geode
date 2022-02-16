@@ -51,6 +51,8 @@ import org.apache.geode.SerializationException;
 import org.apache.geode.cache.execute.FunctionContext;
 import org.apache.geode.cache.execute.ResultSender;
 import org.apache.geode.connectors.jdbc.JdbcConnectorException;
+import org.apache.geode.connectors.jdbc.internal.JdbcConnectorService;
+import org.apache.geode.connectors.jdbc.internal.JdbcConnectorServiceImpl;
 import org.apache.geode.connectors.jdbc.internal.TableMetaDataManager;
 import org.apache.geode.connectors.jdbc.internal.TableMetaDataView;
 import org.apache.geode.connectors.jdbc.internal.configuration.FieldMapping;
@@ -71,6 +73,7 @@ public class CreateMappingPreconditionCheckFunctionTest {
   private static final String DATA_SOURCE_NAME = "testDataSourceName";
   private static final String MEMBER_NAME = "testMemberName";
 
+  private JdbcConnectorService service;
   private RegionMapping regionMapping;
   private FunctionContext<Object[]> context;
   private InternalCache cache;
@@ -78,7 +81,7 @@ public class CreateMappingPreconditionCheckFunctionTest {
   private TableMetaDataManager tableMetaDataManager;
   private TableMetaDataView tableMetaDataView;
   private DataSource dataSource;
-  private PdxType pdxType = mock(PdxType.class);
+  private final PdxType pdxType = mock(PdxType.class);
   private String remoteInputStreamName;
   private RemoteInputStream remoteInputStream;
   private final Object[] inputArgs = new Object[3];
@@ -104,6 +107,9 @@ public class CreateMappingPreconditionCheckFunctionTest {
     remoteInputStreamName = null;
     remoteInputStream = null;
     setupInputArgs();
+
+    service = spy(JdbcConnectorServiceImpl.class);
+    when(cache.getService(JdbcConnectorService.class)).thenReturn(service);
 
     when(regionMapping.getRegionName()).thenReturn(REGION_NAME);
     when(regionMapping.getPdxName()).thenReturn(PDX_CLASS_NAME);

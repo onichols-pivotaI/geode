@@ -89,7 +89,8 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
 
   short SNAPPY_COMPRESSED_CACHED_DESERIALIZABLE = -140;
 
-  short GATEWAY_EVENT_IMPL = -136;
+  // -136 unused
+
   short GATEWAY_SENDER_EVENT_CALLBACK_ARGUMENT = -135;
   short GATEWAY_SENDER_EVENT_IMPL = -134;
 
@@ -179,7 +180,7 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
   byte COLLECTION_TYPE_IMPL = -59;
   byte TX_LOCK_BATCH = -58;
   byte STORE_ALL_CACHED_DESERIALIZABLE = -57;
-  // -56 unused
+  byte CLIENT_RE_AUTHENTICATE = -56;
   byte MAP_TYPE_IMPL = -55;
   byte LOCATOR_LIST_REQUEST = -54;
   byte CLIENT_CONNECTION_REQUEST = -53;
@@ -339,7 +340,7 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
   byte PR_INDEX_CREATION_REPLY_MSG = 68;
   byte PR_MANAGE_BUCKET_REPLY_MESSAGE = 69;
 
-  byte REDIS_BYTE_ARRAY_WRAPPER = 70;
+  // 70 unused
 
   byte UPDATE_MESSAGE = 71;
   byte REPLY_MESSAGE = 72;
@@ -464,8 +465,9 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
   short PR_UPDATE_ENTRY_VERSION_MESSAGE = 159;
 
   short REDIS_KEY = 160;
+  short PUBLISH_REQUEST = 161;
 
-  // 161 through 164 unused
+  // 162 through 164 unused
 
   short PR_FETCH_BULK_ENTRIES_MESSAGE = 165;
   short PR_FETCH_BULK_ENTRIES_REPLY_MESSAGE = 166;
@@ -598,12 +600,14 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
   short COMPACT_RESPONSE = 2119;
   short FLOW_CONTROL_PERMIT_MESSAGE = 2120;
 
-  short OBJECT_PART_LIST66 = 2121;
+  // 2121 unused
+
   short LINKED_RESULTSET = 2122;
   short LINKED_STRUCTSET = 2123;
   short PR_ALL_BUCKET_PROFILES_UPDATE_MESSAGE = 2124;
 
-  short SERIALIZED_OBJECT_PART_LIST = 2125;
+  // 2125 unused
+
   short FLUSH_TO_DISK_REQUEST = 2126;
   short FLUSH_TO_DISK_RESPONSE = 2127;
 
@@ -688,14 +692,13 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
   short REDIS_STRING_ID = 2187;
   short REDIS_HASH_ID = 2188;
   short REDIS_NULL_DATA_ID = 2189;
-  short REDIS_SET_OPTIONS_ID = 2190;
+  // 2190 unused
   short REDIS_MEMBER_INFO_ID = 2191;
   short REDIS_SORTED_SET_ID = 2192;
-  short REDIS_SORTED_SET_OPTIONS_ID = 2193;
   // NOTE, codes > 65535 will take 4 bytes to serialize
 
   /**
-   * This special code is a way for an implementor if this interface to say that it does not have a
+   * This special code is a way for an implementer of this interface to say that it does not have a
    * fixed id. In that case its class name is serialized. Currently only test classes just return
    * this code and it is only available for use in geode-core and its downstream modules.
    */
@@ -712,11 +715,11 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
    * Writes the state of this object as primitive data to the given <code>DataOutput</code>.<br>
    * <br>
    * Note: For rolling upgrades, if there is a change in the object format from previous version,
-   * add a new toDataPre_GFE_X_X_X_X() method and add an entry for the current {@link
-   * KnownVersion} in the getSerializationVersions array of the
-   * implementing class. e.g. if msg format changed in version 80, create toDataPre_GFE_8_0_0_0, add
-   * Version.GFE_80 to the getSerializationVersions array and copy previous toData contents to this
-   * newly created toDataPre_GFE_X_X_X_X() method.
+   * add a new toDataPre_GEODE_X_X_X_X() method and add an entry for the current {@link
+   * KnownVersion} in the getSerializationVersions array of the implementing class. e.g. if msg
+   * format changed in version 1.2, create toDataPre_GEODE_1_2_0_0, add {@link
+   * KnownVersion#GEODE_1_2_0} to the getSerializationVersions array and copy previous toData
+   * contents to this newly created toDataPre_GFE_X_X_X_X() method.
    *
    * @throws IOException A problem occurs while writing to <code>out</code>
    */
@@ -727,10 +730,10 @@ public interface DataSerializableFixedID extends SerializationVersions, BasicSer
    * <br>
    * Note: For rolling upgrades, if there is a change in the object format from previous version,
    * add a new fromDataPre_GFE_X_X_X_X() method and add an entry for the current {@link
-   * KnownVersion} in the getSerializationVersions array of the
-   * implementing class. e.g. if msg format changed in version 80, create fromDataPre_GFE_8_0_0_0,
-   * add Version.GFE_80 to the getSerializationVersions array and copy previous fromData contents to
-   * this newly created fromDataPre_GFE_X_X_X_X() method.
+   * KnownVersion} in the getSerializationVersions array of the implementing class. e.g. if msg
+   * format changed in version 1.2, create fromDataPre_GEODE_1_2_0_0, add {@link
+   * KnownVersion#GEODE_1_2_0} to the getSerializationVersions array and copy previous fromData
+   * contents to this newly created fromDataPre_GFE_X_X_X_X() method.
    *
    * @throws IOException A problem occurs while reading from <code>in</code>
    * @throws ClassNotFoundException A class could not be loaded while reading from <code>in</code>

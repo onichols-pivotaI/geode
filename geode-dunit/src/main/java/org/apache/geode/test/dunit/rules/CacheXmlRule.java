@@ -16,7 +16,6 @@ package org.apache.geode.test.dunit.rules;
 
 import static org.apache.geode.test.dunit.VM.DEFAULT_VM_COUNT;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -47,9 +46,9 @@ public class CacheXmlRule extends AbstractDistributedRule {
   private static final String BEFORE = "before";
   private static final String AFTER = "after";
 
-  private static final CacheXmlCreation DUMMY = mock(CacheXmlCreation.class);
+  private static final CacheXmlCreation DUMMY = new CacheXmlCreation(null, null);
   private static final AtomicReference<ICacheXmlCreation> DELEGATE = new AtomicReference<>(DUMMY);
-  private static final SerializableRunnableIF NO_OP = mock(SerializableRunnableIF.class);
+  private static final SerializableRunnableIF NO_OP = new DummySerializableRunnableIF();
 
   private final AtomicReference<SerializableRunnableIF> createCache = new AtomicReference<>(NO_OP);
 
@@ -98,12 +97,12 @@ public class CacheXmlRule extends AbstractDistributedRule {
     method.setAccessible(true);
     method.invoke(temporaryFolder);
 
-    invoker().invokeInEveryVMAndController(() -> invokeBefore());
+    invoker().invokeInEveryVMAndController(this::invokeBefore);
   }
 
   @Override
   public void after() {
-    invoker().invokeInEveryVMAndController(() -> invokeAfter());
+    invoker().invokeInEveryVMAndController(this::invokeAfter);
 
     try {
       Method method = TemporaryFolder.class.getDeclaredMethod(AFTER);
@@ -116,12 +115,12 @@ public class CacheXmlRule extends AbstractDistributedRule {
 
   @Override
   protected void afterCreateVM(VM vm) {
-    vm.invoke(() -> invokeBefore());
+    vm.invoke(this::invokeBefore);
   }
 
   @Override
   protected void afterBounceVM(VM vm) {
-    vm.invoke(() -> invokeBefore());
+    vm.invoke(this::invokeBefore);
   }
 
   private void invokeBefore() throws Exception {
@@ -225,6 +224,24 @@ public class CacheXmlRule extends AbstractDistributedRule {
     @Override
     public boolean isClosed() {
       return closed.get();
+    }
+  }
+
+  private static class DummySerializableRunnableIF implements SerializableRunnableIF {
+
+    @Override
+    public void run() throws Exception {
+      // nothing
+    }
+
+    @Override
+    public String getMethodName() {
+      return null;
+    }
+
+    @Override
+    public long getId() {
+      return -1;
     }
   }
 }

@@ -15,10 +15,10 @@
 package org.apache.geode.cache.client.internal;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.InternalGemFireError;
 import org.apache.geode.cache.execute.Function;
@@ -69,9 +69,8 @@ public class ExecuteFunctionNoAckOp {
               + op.getMessage() + " to all servers using pool: " + pool);
         }
         servers = pool.getConnectionSource().getAllServers();
-        Iterator i = servers.iterator();
-        while (i.hasNext()) {
-          pool.executeOn((ServerLocation) i.next(), op);
+        for (final Object server : servers) {
+          pool.executeOn((ServerLocation) server, op);
         }
       } else {
         if (logger.isDebugEnabled()) {
@@ -111,9 +110,8 @@ public class ExecuteFunctionNoAckOp {
               + op.getMessage() + " to all servers using pool: " + pool);
         }
         servers = pool.getConnectionSource().getAllServers();
-        Iterator i = servers.iterator();
-        while (i.hasNext()) {
-          pool.executeOn((ServerLocation) i.next(), op);
+        for (final Object server : servers) {
+          pool.executeOn((ServerLocation) server, op);
         }
       } else {
         if (logger.isDebugEnabled()) {
@@ -171,7 +169,7 @@ public class ExecuteFunctionNoAckOp {
         boolean isHA, boolean optimizeForWrite, String[] groups, boolean allMembers) {
       super(MessageType.EXECUTE_FUNCTION, MSG_PARTS);
       getMessage().addBytesPart(new byte[] {AbstractExecution.getFunctionState(isHA,
-          hasResult == (byte) 1 ? true : false, optimizeForWrite)});
+          hasResult == (byte) 1, optimizeForWrite)});
       getMessage().addStringOrObjPart(functionId);
       getMessage().addObjPart(args);
       getMessage().addObjPart(memberMappedArg);
@@ -180,7 +178,7 @@ public class ExecuteFunctionNoAckOp {
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       final int msgType = msg.getMessageType();
       if (msgType == MessageType.REPLY) {
         return null;
@@ -220,7 +218,7 @@ public class ExecuteFunctionNoAckOp {
     }
 
     @Override
-    protected Message createResponseMessage() {
+    protected @NotNull Message createResponseMessage() {
       return new Message(1, KnownVersion.CURRENT);
     }
   }

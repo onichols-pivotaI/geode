@@ -18,7 +18,7 @@ package org.apache.geode.internal.cache.tier.sockets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import java.io.DataOutputStream;
@@ -45,13 +45,13 @@ public class MessageIdExtractorTest {
 
   private MessageIdExtractor messageIdExtractor;
 
-  private Long connectionId = 123L;
-  private Long uniqueId = 234L;
+  private final Long connectionId = 123L;
+  private final Long uniqueId = 234L;
   private byte[] decryptedBytes;
 
   @Before
   public void before() throws Exception {
-    this.messageIdExtractor = new MessageIdExtractor();
+    messageIdExtractor = new MessageIdExtractor();
     decryptedBytes = byteArrayFromIds(connectionId, uniqueId);
 
     MockitoAnnotations.initMocks(this);

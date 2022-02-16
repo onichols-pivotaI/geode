@@ -324,6 +324,8 @@ org/apache/geode/internal/cache/control/InternalResourceManager$ResourceType,fal
 org/apache/geode/internal/cache/control/MemoryThresholds$MemoryState,false
 org/apache/geode/internal/cache/control/PartitionRebalanceDetailsImpl,true,5880667005758250156,bucketCreateBytes:long,bucketCreateTime:long,bucketCreatesCompleted:int,bucketRemoveBytes:long,bucketRemoveTime:long,bucketRemovesCompleted:int,bucketTransferBytes:long,bucketTransferTime:long,bucketTransfersCompleted:int,numOfMembers:int,partitionMemberDetailsAfter:java/util/Set,partitionMemberDetailsBefore:java/util/Set,primaryTransferTime:long,primaryTransfersCompleted:int,time:long
 org/apache/geode/internal/cache/control/RebalanceResultsImpl,false,detailSet:java/util/Set,totalBucketCreateBytes:long,totalBucketCreateTime:long,totalBucketCreatesCompleted:int,totalBucketTransferBytes:long,totalBucketTransferTime:long,totalBucketTransfersCompleted:int,totalNumOfMembers:int,totalPrimaryTransferTime:long,totalPrimaryTransfersCompleted:int,totalTime:long
+org/apache/geode/internal/cache/control/SerializableRegionRedundancyStatusImpl,false
+org/apache/geode/internal/cache/control/SerializableRestoreRedundancyResultsImpl,true,-6385537590999520662
 org/apache/geode/internal/cache/execute/BucketMovedException,true,4893171227542647452
 org/apache/geode/internal/cache/execute/InternalFunctionException,true,3532698050312820319
 org/apache/geode/internal/cache/execute/InternalFunctionInvocationTargetException,true,-6063507496829271815,failedIds:java/util/Set
@@ -352,7 +354,7 @@ org/apache/geode/internal/cache/snapshot/WindowedExporter$WindowedArgs,true,1,ex
 org/apache/geode/internal/cache/snapshot/WindowedExporter$WindowedExportFunction,true,1
 org/apache/geode/internal/cache/tier/BatchException,true,-6707074107791305564,_index:int
 org/apache/geode/internal/cache/tier/sockets/ClientTombstoneMessage$TOperation,false
-org/apache/geode/internal/cache/tier/sockets/MessageDispatcher$1,true,0,this$0:org/apache/geode/internal/cache/tier/sockets/MessageDispatcher
+org/apache/geode/internal/cache/tier/sockets/MessageDispatcher$1,true,0
 org/apache/geode/internal/cache/tier/sockets/MessageTooLargeException,true,-8970585803331525833
 org/apache/geode/internal/cache/tier/sockets/UnregisterAllInterest,true,5026160621257178459
 org/apache/geode/internal/cache/tx/TransactionalOperation$ServerRegionOperation,false
@@ -438,9 +440,8 @@ org/apache/geode/management/internal/BackupStatusImpl,true,3704172840296221840,b
 org/apache/geode/management/internal/CacheElementOperation,false
 org/apache/geode/management/internal/ContextAwareSSLRMIClientSocketFactory,true,8159615071011918570
 org/apache/geode/management/internal/JmxManagerLocator$StartJmxManagerFunction,true,-2860286061903069789
-org/apache/geode/management/internal/ManagementAgent$GemFireRMIServerSocketFactory,true,-811909050641332716,bindAddr:java/net/InetAddress
 org/apache/geode/management/internal/ManagementFunction,true,1,mbeanServer:javax/management/MBeanServer,notificationHub:org/apache/geode/management/internal/NotificationHub
-org/apache/geode/management/internal/NotificationKey,false,currentTime:long,objectName:javax/management/ObjectName
+org/apache/geode/management/internal/NotificationKey,true,2207984824068608930,currentTime:long,objectName:javax/management/ObjectName
 org/apache/geode/management/internal/beans/FileUploader$RemoteFile,false,filename:java/lang/String,outputStream:com/healthmarketscience/rmiio/RemoteOutputStream
 org/apache/geode/management/internal/beans/QueryDataFunction,true,1
 org/apache/geode/management/internal/beans/QueryDataFunction$LocalQueryFunction,true,1,id:java/lang/String,optimizeForWrite:boolean,regionName:java/lang/String,showMembers:boolean,this$0:org/apache/geode/management/internal/beans/QueryDataFunction
@@ -479,6 +480,7 @@ org/apache/geode/pdx/internal/EnumInfo$PdxInstanceEnumInfo,true,7907582104525106
 org/apache/geode/pdx/internal/PdxInputStream,false
 org/apache/geode/pdx/internal/PdxReaderImpl,true,-6094553093860427759,blobType:org/apache/geode/pdx/internal/PdxType,dis:org/apache/geode/pdx/internal/PdxInputStream
 org/apache/geode/security/AuthTokenEnabledComponents,false
+org/apache/geode/security/AuthenticationExpiredException,true,1771792091260325297
 org/apache/geode/security/AuthenticationFailedException,true,-8202866472279088879
 org/apache/geode/security/AuthenticationRequiredException,true,4675976651103154919
 org/apache/geode/security/GemFireSecurityException,true,3814254578203076926,cause:java/lang/Throwable

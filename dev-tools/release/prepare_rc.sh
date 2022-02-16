@@ -18,7 +18,8 @@
 set -e
 
 usage() {
-    echo "Usage: prepare_rc -v version_number -k signing_key -a apache_ldap_username"
+    echo "Usage: prepare_rc.sh -j ticket -v version_number -k signing_key -a apache_ldap_username"
+    echo "  -j   The GEODE-nnnnn Jira identifier for this release"
     echo "  -v   The #.#.#.RC# version number"
     echo "  -k   Your 8 digit GPG key id (the last 8 digits of your gpg fingerprint)"
     echo "  -a   Your apache LDAP username (that you use to log in to https://id.apache.org)"
@@ -33,12 +34,16 @@ checkCommand() {
     fi
 }
 
+JIRA=""
 FULL_VERSION=""
 SIGNING_KEY=""
 APACHE_USERNAME=""
 
-while getopts ":v:k:a:" opt; do
+while getopts ":j:v:k:a:" opt; do
   case ${opt} in
+    j )
+      JIRA=$OPTARG
+      ;;
     v )
       FULL_VERSION=$OPTARG
       ;;
@@ -54,7 +59,7 @@ while getopts ":v:k:a:" opt; do
   esac
 done
 
-if [[ ${FULL_VERSION} == "" ]] || [[ ${SIGNING_KEY} == "" ]] || [[ ${APACHE_USERNAME} == "" ]]; then
+if [[ ${JIRA} == "" ]] || [[ ${FULL_VERSION} == "" ]] || [[ ${SIGNING_KEY} == "" ]] || [[ ${APACHE_USERNAME} == "" ]]; then
     usage
 fi
 
@@ -78,6 +83,24 @@ checkCommand gpg
 checkCommand cmake
 checkCommand svn
 checkCommand doxygen
+
+
+echo ""
+echo "============================================================"
+echo "Checking java..."
+echo "============================================================"
+[ -z "$JAVA_HOME" ] && JAVA=java || JAVA=$JAVA_HOME/bin/java
+if ! $JAVA -XshowSettings:properties -version 2>&1 | grep 'java.specification.version = 1.8' ; then
+  echo "Please set JAVA_HOME to use JDK 8 to compile Geode for release"
+  exit 1
+fi
+if $JAVA -XshowSettings:properties -version 2>&1 | grep 'java.vm.vendor = Oracle' ; then
+  echo "Please set JAVA_HOME to use an Open JDK 8 such as from https://adoptopenjdk.net/?variant=openjdk8&jvmVariant=hotspot to compile Geode for release"
+  exit 1
+else
+  $JAVA -XshowSettings:properties -version 2>&1 | grep 'java.vm.vendor = '
+fi
+
 
 echo ""
 echo "============================================================"
@@ -147,6 +170,7 @@ git clone --single-branch --branch support/${VERSION_MM} git@github.com:apache/g
 git clone --single-branch --branch support/${VERSION_MM} git@github.com:apache/geode-native.git
 git clone --single-branch --branch develop git@github.com:apache/geode-native.git geode-native-develop
 git clone --single-branch --branch support/${VERSION_MM} git@github.com:apache/geode-benchmarks.git
+git clone --single-branch --branch develop git@github.com:apache/geode-benchmarks.git geode-benchmarks-develop
 git clone --single-branch --branch master git@github.com:Homebrew/homebrew-core.git
 
 svn checkout https://dist.apache.org/repos/dist --depth empty
@@ -161,7 +185,7 @@ done
 
 cd ${GEODE}/../..
 set -x
-${0%/*}/set_copyright.sh ${GEODE} ${GEODE_EXAMPLES} ${GEODE_NATIVE} ${GEODE_BENCHMARKS}
+${0%/*}/set_copyright.sh -j $JIRA ${GEODE} ${GEODE_EXAMPLES} ${GEODE_NATIVE} ${GEODE_BENCHMARKS}
 set +x
 
 
@@ -171,7 +195,7 @@ echo "Keeping -build.0 suffix"
 echo "============================================================"
 cd ${GEODE}/../..
 set -x
-${0%/*}/set_versions.sh -v ${VERSION} -n -w ${WORKSPACE}
+${0%/*}/set_versions.sh -j $JIRA -v ${VERSION} -n -w ${WORKSPACE}
 set +x
 
 
@@ -201,7 +225,7 @@ if [ "${FULL_VERSION##*.RC}" -gt 1 ] ; then
     git add gradle.properties
     if [ $(git diff --staged | wc -l) -gt 0 ] ; then
         git diff --staged --color | cat
-        git commit -m 'Revert "temporarily point to staging repo for CI purposes"'
+        git commit -m "Revert "'"'"$JIRA: Set temporary staging repo"'"'
     fi
     set +x
 fi
@@ -264,7 +288,7 @@ set +x
 function failMsg2 {
   errln=$1
   echo "ERROR: script did NOT complete successfully"
-  echo "Comment out any steps that already succeeded (approximately lines 120-$(( errln - 1 ))) and try again"
+  echo "Comment out any steps that already succeeded (approximately lines 149-$(( errln - 1 ))) and try again"
   echo "For this script only (prepare_rc.sh), it's also safe to just try again from the top"
 }
 trap 'failMsg2 $LINENO' ERR
@@ -329,9 +353,10 @@ echo "============================================================"
 echo "Publishing artifacts to nexus staging manager..."
 echo "PLEASE NOTE, the 2nd prompt will be for your apache (not gpg) password.  Pay attention as the prompts look very similar."
 echo "============================================================"
+publishcmd="./gradlew publish --no-parallel -Pversion=${VERSION} -Paskpass -Psigning.keyId=${SIGNING_KEY} -Psigning.secretKeyRingFile=${HOME}/.gnupg/secring.gpg -PmavenUsername=${APACHE_USERNAME}"
 set -x
 cd ${GEODE}
-./gradlew publish -Pversion=${VERSION} -Paskpass -Psigning.keyId=${SIGNING_KEY} -Psigning.secretKeyRingFile=${HOME}/.gnupg/secring.gpg -PmavenUsername=${APACHE_USERNAME}
+sh -c "$publishcmd"
 set +x
 
 
@@ -342,7 +367,8 @@ echo "============================================================"
 cd ${GEODE}/../..
 echo "1. Go to https://repository.apache.org, login as ${APACHE_USERNAME}, and click on Staging Repositories"
 echo "2. If there is a prior ${VERSION} RC, select it and click Drop."
+echo "2b.If publication got split between two staging repos, drop one of them then run: pushd ${GEODE}; $publishcmd; popd"
 echo '3. Make a note of the 4-digit ID of the current ("implicitly created") staging repo.'
 echo '4. Select the current staging repo and click Close.'
 echo '5. Wait ~10 seconds and then refresh the page to confirm that status has become "Closed"'
-echo "6. Run ${0%/*}/commit_rc.sh -v ${FULL_VERSION} -m <4-DIGIT-ID-NOTED-ABOVE>"
+echo "6. Run ${0%/*}/commit_rc.sh -j $JIRA -v ${FULL_VERSION} -m <4-DIGIT-ID-NOTED-ABOVE>"

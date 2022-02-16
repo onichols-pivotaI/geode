@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.InternalGemFireError;
 import org.apache.geode.cache.client.NoAvailableServersException;
@@ -158,27 +159,27 @@ public class ExecuteFunctionOp {
 
   public static class ExecuteFunctionOpImpl extends AbstractOpWithTimeout {
 
-    private ResultCollector resultCollector;
+    private final ResultCollector resultCollector;
 
     // To get the instance of the Function Statistics we need the function name or instance
-    private String functionId;
+    private final String functionId;
 
     private Function function;
 
-    private Object args;
+    private final Object args;
 
-    private MemberMappedArgument memberMappedArg;
+    private final MemberMappedArgument memberMappedArg;
 
-    private byte hasResult;
+    private final byte hasResult;
 
-    private boolean isFnSerializationReqd;
+    private final boolean isFnSerializationReqd;
 
-    private String[] groups;
+    private final String[] groups;
 
     /**
      * [0] = allMembers [1] = ignoreFailedMembers
      */
-    private byte[] flags;
+    private final byte[] flags;
 
     /**
      * number of parts in the request message
@@ -217,7 +218,7 @@ public class ExecuteFunctionOp {
       this.function = function;
       this.args = args;
       this.memberMappedArg = memberMappedArg;
-      this.hasResult = fnState;
+      hasResult = fnState;
       this.isFnSerializationReqd = isFnSerializationReqd;
       this.groups = groups;
     }
@@ -311,7 +312,7 @@ public class ExecuteFunctionOp {
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       ChunkedMessage executeFunctionResponseMsg = (ChunkedMessage) msg;
       try {
         // Read the header which describes the type of message following
@@ -425,7 +426,7 @@ public class ExecuteFunctionOp {
     }
 
     @Override
-    protected Message createResponseMessage() {
+    protected @NotNull Message createResponseMessage() {
       return new ChunkedMessage(1, KnownVersion.CURRENT);
     }
   }

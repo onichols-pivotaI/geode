@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.Region;
 import org.apache.geode.internal.cache.BucketServerLocation66;
@@ -48,8 +50,9 @@ public class GetClientPRMetadataCommand66 extends BaseCommand {
   private GetClientPRMetadataCommand66() {}
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start)
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start)
       throws IOException, ClassNotFoundException, InterruptedException {
     String regionFullPath = null;
     CachedRegionHelper crHelper = serverConnection.getCachedRegionHelper();
@@ -60,7 +63,7 @@ public class GetClientPRMetadataCommand66 extends BaseCommand {
       errMessage =
           "The input region path for the GetClientPRMetadata request is null";
       writeErrorResponse(clientMessage, MessageType.GET_CLIENT_PR_METADATA_ERROR,
-          errMessage.toString(), serverConnection);
+          errMessage, serverConnection);
       serverConnection.setAsTrue(RESPONDED);
     } else {
       Region region = crHelper.getRegion(regionFullPath);
@@ -70,7 +73,7 @@ public class GetClientPRMetadataCommand66 extends BaseCommand {
         errMessage = "Region was not found during GetClientPRMetadata request for region path : "
             + regionFullPath;
         writeErrorResponse(clientMessage, MessageType.GET_CLIENT_PR_METADATA_ERROR,
-            errMessage.toString(), serverConnection);
+            errMessage, serverConnection);
         serverConnection.setAsTrue(RESPONDED);
       } else {
         try {

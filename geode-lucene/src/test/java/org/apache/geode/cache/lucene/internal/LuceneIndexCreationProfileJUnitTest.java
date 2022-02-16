@@ -33,7 +33,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.KeywordAnalyzer;
@@ -51,15 +50,15 @@ import org.apache.geode.cache.lucene.test.LuceneTestUtilities;
 import org.apache.geode.internal.HeapDataOutputStream;
 import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.test.junit.categories.LuceneTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category({LuceneTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class LuceneIndexCreationProfileJUnitTest {
 
   @Test
   @Parameters(method = "getSerializationProfiles")
   public void testSerialization(LuceneIndexCreationProfile profile) {
-    LuceneServiceImpl.registerDataSerializables();
     LuceneIndexCreationProfile copy = CopyHelper.deepCopy(profile);
     assertEquals(profile.getIndexName(), copy.getIndexName());
     assertEquals(profile.getAnalyzerClass(), copy.getAnalyzerClass());

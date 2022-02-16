@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -37,10 +36,12 @@ import org.apache.geode.cache.PartitionedRegionStorageException;
 import org.apache.geode.cache.Region;
 import org.apache.geode.test.dunit.Assert;
 import org.apache.geode.test.dunit.SerializableRunnableIF;
+import org.apache.geode.test.dunit.cache.internal.JUnit4CacheTestCase;
 import org.apache.geode.test.junit.categories.LuceneTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category({LuceneTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class PaginationDUnitTest extends LuceneQueriesAccessorBase {
   protected static final int PAGE_SIZE = 2;
   protected static final int FLUSH_WAIT_TIME_MS = 60000;
@@ -85,13 +86,13 @@ public class PaginationDUnitTest extends LuceneQueriesAccessorBase {
       assertTrue(pages.hasNext());
       List<LuceneResultStruct<Integer, TestObject>> page = pages.next();
       assertEquals(page.size(), PAGE_SIZE, page.size());
-      dataStore1.invoke(() -> closeCache());
+      dataStore1.invoke(JUnit4CacheTestCase::closeCache);
       try {
         page = pages.next();
         fail();
       } catch (Exception e) {
         Assert.assertEquals(
-            "Expected Exception = PartitionedRegionStorageException but hit " + e.toString(), true,
+            "Expected Exception = PartitionedRegionStorageException but hit " + e, true,
             e instanceof PartitionedRegionStorageException);
       }
     });
@@ -128,7 +129,7 @@ public class PaginationDUnitTest extends LuceneQueriesAccessorBase {
       List<LuceneResultStruct<Integer, TestObject>> page = pages.next();
       combinedResult.addAll(page);
       assertEquals(PAGE_SIZE, page.size());
-      dataStore1.invoke(() -> closeCache());
+      dataStore1.invoke(JUnit4CacheTestCase::closeCache);
       for (int i = 0; i < ((NUM_BUCKETS / PAGE_SIZE) - 1); i++) {
         page = pages.next();
         assertEquals(PAGE_SIZE, page.size());
@@ -141,7 +142,7 @@ public class PaginationDUnitTest extends LuceneQueriesAccessorBase {
   private void validateTheCombinedResult(
       final List<LuceneResultStruct<Integer, TestObject>> combinedResult) {
     Map<Integer, TestObject> resultMap = combinedResult.stream()
-        .collect(Collectors.toMap(entry -> entry.getKey(), entry -> entry.getValue()));
+        .collect(Collectors.toMap(LuceneResultStruct::getKey, LuceneResultStruct::getValue));
     assertEquals(NUM_BUCKETS, resultMap.size());
 
     for (int i = 0; i < NUM_BUCKETS; i++) {

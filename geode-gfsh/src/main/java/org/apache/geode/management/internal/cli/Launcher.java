@@ -14,6 +14,8 @@
  */
 package org.apache.geode.management.internal.cli;
 
+import static org.apache.geode.internal.util.ProductVersionUtil.getDistributionVersion;
+
 import java.io.PrintStream;
 import java.util.HashSet;
 import java.util.List;
@@ -26,8 +28,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.shell.core.ExitShellRequest;
 
 import org.apache.geode.internal.ExitCode;
-import org.apache.geode.internal.GemFireVersion;
 import org.apache.geode.internal.util.ArgumentRedactor;
+import org.apache.geode.internal.version.DistributionVersion;
 import org.apache.geode.management.internal.cli.shell.Gfsh;
 import org.apache.geode.management.internal.cli.shell.GfshConfig;
 import org.apache.geode.management.internal.i18n.CliStrings;
@@ -85,35 +87,35 @@ public class Launcher {
 
   private final Set<String> allowedCommandLineCommands;
   private final OptionParser commandLineParser;
-  private StartupTimeLogHelper startupTimeLogHelper;
+  private final StartupTimeLogHelper startupTimeLogHelper;
 
   protected Launcher() {
-    this.startupTimeLogHelper = new StartupTimeLogHelper();
-    this.allowedCommandLineCommands = new HashSet<>();
-    this.allowedCommandLineCommands.add(CliStrings.RUN);
-    this.allowedCommandLineCommands.add(CliStrings.START_PULSE);
-    this.allowedCommandLineCommands.add(CliStrings.START_JCONSOLE);
-    this.allowedCommandLineCommands.add(CliStrings.START_JVISUALVM);
-    this.allowedCommandLineCommands.add(CliStrings.START_LOCATOR);
-    this.allowedCommandLineCommands.add(CliStrings.START_MANAGER);
-    this.allowedCommandLineCommands.add(CliStrings.START_SERVER);
-    this.allowedCommandLineCommands.add(CliStrings.START_VSD);
-    this.allowedCommandLineCommands.add(CliStrings.STATUS_LOCATOR);
-    this.allowedCommandLineCommands.add(CliStrings.STATUS_SERVER);
-    this.allowedCommandLineCommands.add(CliStrings.STOP_LOCATOR);
-    this.allowedCommandLineCommands.add(CliStrings.STOP_SERVER);
-    this.allowedCommandLineCommands.add(CliStrings.VERSION);
-    this.allowedCommandLineCommands.add(CliStrings.COMPACT_OFFLINE_DISK_STORE);
-    this.allowedCommandLineCommands.add(CliStrings.DESCRIBE_OFFLINE_DISK_STORE);
-    this.allowedCommandLineCommands.add(CliStrings.EXPORT_OFFLINE_DISK_STORE);
-    this.allowedCommandLineCommands.add(CliStrings.VALIDATE_DISK_STORE);
-    this.allowedCommandLineCommands.add(CliStrings.PDX_DELETE_FIELD);
-    this.allowedCommandLineCommands.add(CliStrings.PDX_RENAME);
+    startupTimeLogHelper = new StartupTimeLogHelper();
+    allowedCommandLineCommands = new HashSet<>();
+    allowedCommandLineCommands.add(CliStrings.RUN);
+    allowedCommandLineCommands.add(CliStrings.START_PULSE);
+    allowedCommandLineCommands.add(CliStrings.START_JCONSOLE);
+    allowedCommandLineCommands.add(CliStrings.START_JVISUALVM);
+    allowedCommandLineCommands.add(CliStrings.START_LOCATOR);
+    allowedCommandLineCommands.add(CliStrings.START_MANAGER);
+    allowedCommandLineCommands.add(CliStrings.START_SERVER);
+    allowedCommandLineCommands.add(CliStrings.START_VSD);
+    allowedCommandLineCommands.add(CliStrings.STATUS_LOCATOR);
+    allowedCommandLineCommands.add(CliStrings.STATUS_SERVER);
+    allowedCommandLineCommands.add(CliStrings.STOP_LOCATOR);
+    allowedCommandLineCommands.add(CliStrings.STOP_SERVER);
+    allowedCommandLineCommands.add(CliStrings.VERSION);
+    allowedCommandLineCommands.add(CliStrings.COMPACT_OFFLINE_DISK_STORE);
+    allowedCommandLineCommands.add(CliStrings.DESCRIBE_OFFLINE_DISK_STORE);
+    allowedCommandLineCommands.add(CliStrings.EXPORT_OFFLINE_DISK_STORE);
+    allowedCommandLineCommands.add(CliStrings.VALIDATE_DISK_STORE);
+    allowedCommandLineCommands.add(CliStrings.PDX_DELETE_FIELD);
+    allowedCommandLineCommands.add(CliStrings.PDX_RENAME);
 
-    this.commandLineParser = new OptionParser();
-    this.commandLineParser.accepts(EXECUTE_OPTION).withOptionalArg().ofType(String.class);
-    this.commandLineParser.accepts(HELP_OPTION).withOptionalArg().ofType(Boolean.class);
-    this.commandLineParser.posixlyCorrect(false);
+    commandLineParser = new OptionParser();
+    commandLineParser.accepts(EXECUTE_OPTION).withOptionalArg().ofType(String.class);
+    commandLineParser.accepts(HELP_OPTION).withOptionalArg().ofType(Boolean.class);
+    commandLineParser.posixlyCorrect(false);
   }
 
   public static void main(final String[] args) {
@@ -135,7 +137,7 @@ public class Launcher {
     Gfsh gfsh = null;
     try {
       gfsh = Gfsh.getInstance(false, args, new GfshConfig());
-      this.startupTimeLogHelper.logStartupTime();
+      startupTimeLogHelper.logStartupTime();
     } catch (IllegalStateException isex) {
       System.err.println("ERROR : " + isex.getMessage());
     }
@@ -155,7 +157,7 @@ public class Launcher {
         }
       } else {
         boolean commandIsAllowed = false;
-        for (String allowedCommandLineCommand : this.allowedCommandLineCommands) {
+        for (String allowedCommandLineCommand : allowedCommandLineCommands) {
           if (commandLineCommand.startsWith(allowedCommandLineCommand)) {
             commandIsAllowed = true;
             break;
@@ -184,7 +186,7 @@ public class Launcher {
   private int parseOptions(final String... args) {
     OptionSet parsedOptions;
     try {
-      parsedOptions = this.commandLineParser.parse(args);
+      parsedOptions = commandLineParser.parse(args);
     } catch (OptionException e) {
       System.err.println(
           CliStrings.format(MSG_INVALID_COMMAND_OR_OPTION, StringUtils.join(args, SEPARATOR)));
@@ -199,7 +201,7 @@ public class Launcher {
     Gfsh gfsh = null;
     try {
       gfsh = Gfsh.getInstance(launchShell, args, new GfshConfig());
-      this.startupTimeLogHelper.logStartupTime();
+      startupTimeLogHelper.logStartupTime();
     } catch (IllegalStateException isex) {
       System.err.println("ERROR : " + isex.getMessage());
     }
@@ -263,8 +265,9 @@ public class Launcher {
 
   private void printUsage(final Gfsh gfsh, final PrintStream stream) {
     int terminalWidth = gfsh.getTerminalWidth();
-    stream.print(GemFireVersion.getProductName() + " v");
-    stream.print(GemFireVersion.getGemFireVersion());
+    final DistributionVersion distributionVersion = getDistributionVersion();
+    stream.print(distributionVersion.getName() + " v");
+    stream.print(distributionVersion.getVersion());
     stream.println(" Command Line Shell" + GfshParser.LINE_SEPARATOR);
     stream.println("USAGE");
     stream.println(

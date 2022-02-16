@@ -14,9 +14,13 @@
  */
 package org.apache.geode.internal.cache.tier.sockets.command;
 
+import static java.lang.String.format;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.CancelException;
 import org.apache.geode.annotations.Immutable;
@@ -43,11 +47,10 @@ import org.apache.geode.internal.cache.tier.sockets.ServerConnection;
 import org.apache.geode.internal.cache.versions.VersionTag;
 import org.apache.geode.internal.cache.wan.BatchException70;
 import org.apache.geode.internal.cache.wan.GatewayReceiverStats;
+import org.apache.geode.internal.cache.wan.GatewaySenderEventImpl;
 import org.apache.geode.internal.security.AuthorizeRequest;
 import org.apache.geode.internal.security.SecurityService;
-import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.internal.util.BlobHelper;
-import org.apache.geode.pdx.PdxConfigurationException;
 import org.apache.geode.pdx.PdxRegistryMismatchException;
 import org.apache.geode.pdx.internal.EnumId;
 import org.apache.geode.pdx.internal.EnumInfo;
@@ -72,14 +75,16 @@ public class GatewayReceiverCommand extends BaseCommand {
     if (cache != null && cache.isCacheAtShutdownAll()) {
       throw cache.getCacheClosedException("Shutdown occurred during message processing");
     }
-    String reason = String.format("Region %s was not found during batch create request %s",
+    String reason = format("Region %s was not found during batch create request %s",
         regionName, batchId);
     throw new RegionDestroyedException(reason, regionName);
   }
 
   @Override
-  public void cmdExecute(final Message clientMessage, final ServerConnection serverConnection,
-      final SecurityService securityService, long start) throws IOException, InterruptedException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, long start)
+      throws IOException, InterruptedException {
     CachedRegionHelper crHelper = serverConnection.getCachedRegionHelper();
     GatewayReceiverStats stats = (GatewayReceiverStats) serverConnection.getCacheServerStats();
 
@@ -173,7 +178,7 @@ public class GatewayReceiverCommand extends BaseCommand {
           try {
             possibleDuplicatePartBytes = (byte[]) possibleDuplicatePart.getObject();
           } catch (Exception e) {
-            logger.warn(String.format(
+            logger.warn(format(
                 "%s: Caught exception processing batch request %s containing %s events",
                 serverConnection.getName(), batchId, numberOfEvents), e);
             handleException(removeOnException, stats, e);
@@ -181,14 +186,9 @@ public class GatewayReceiverCommand extends BaseCommand {
           }
           boolean possibleDuplicate = possibleDuplicatePartBytes[0] == 0x01;
 
-          // Make sure instance variables are null before each iteration
-          String regionName = null;
-          Object key = null;
-          Object callbackArg = null;
-
           // Retrieve the region name from the message parts
           Part regionNamePart = clientMessage.getPart(partNumber + 2);
-          regionName = regionNamePart.getCachedString();
+          String regionName = regionNamePart.getCachedString();
           if (regionName.equals(PeerTypeRegistration.REGION_FULL_PATH)) {
             indexWithoutPDXEvent--;
             isPdxEvent = true;
@@ -206,7 +206,7 @@ public class GatewayReceiverCommand extends BaseCommand {
           try {
             eventId = (EventID) eventIdPart.getObject();
           } catch (Exception e) {
-            logger.warn(String.format(
+            logger.warn(format(
                 "%s: Caught exception processing batch request %s containing %s events",
                 serverConnection.getName(), batchId, numberOfEvents), e);
             handleException(removeOnException, stats, e);
@@ -215,10 +215,11 @@ public class GatewayReceiverCommand extends BaseCommand {
 
           // Retrieve the key from the message parts
           Part keyPart = clientMessage.getPart(partNumber + 4);
+          Object key;
           try {
             key = keyPart.getStringOrObject();
           } catch (Exception e) {
-            logger.warn(String.format(
+            logger.warn(format(
                 "%s: Caught exception processing batch request %s containing %s events",
                 serverConnection.getName(), batchId, numberOfEvents), e);
             handleException(removeOnException, stats, e);
@@ -230,24 +231,12 @@ public class GatewayReceiverCommand extends BaseCommand {
           long versionTimeStamp;
           Part callbackArgExistsPart;
           LocalRegion region;
+          Object callbackArg = null;
           switch (actionType) {
             case 0: // Create
               try {
-
-                /*
-                 * CLIENT EXCEPTION HANDLING TESTING CODE String keySt = (String) key;
-                 * System.out.println("Processing new key: " + key); if
-                 * (keySt.startsWith("failure")) { throw new Exception(LocalizedStrings
-                 * .ProcessBatch_THIS_EXCEPTION_REPRESENTS_A_FAILURE_ON_THE_SERVER
-                 * )); }
-                 */
-
                 // Retrieve the value from the message parts (do not deserialize it)
                 valuePart = clientMessage.getPart(partNumber + 5);
-                // try {
-                // logger.warn(getName() + ": Creating key " + key + " value " +
-                // valuePart.getObject());
-                // } catch (Exception e) {}
 
                 // Retrieve the callbackArg from the message parts if necessary
                 index = partNumber + 6;
@@ -262,7 +251,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                     callbackArg = callbackArgPart.getObject();
                   } catch (Exception e) {
                     logger
-                        .warn(String.format(
+                        .warn(format(
                             "%s: Caught exception processing batch create request %s for %s events",
                             serverConnection.getName(), batchId, numberOfEvents),
                             e);
@@ -285,7 +274,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   if (regionName == null) {
                     message = "%s: The input region name for the batch create request %s is null";
                   }
-                  String s = String.format(message, serverConnection.getName(), batchId);
+                  String s = format(message, serverConnection.getName(), batchId);
                   logger.warn(s);
                   throw new Exception(s);
                 }
@@ -305,8 +294,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   handleMessageRetry(region, clientEvent);
                   byte[] value = valuePart.getSerializedForm();
                   boolean isObject = valuePart.isObject();
-                  // [sumedh] This should be done on client while sending
-                  // since that is the WAN gateway
+                  // This should be done on client while sending since that is the WAN gateway
                   AuthorizeRequest authzRequest = serverConnection.getAuthzRequest();
                   if (authzRequest != null) {
                     PutOperationContext putContext =
@@ -315,7 +303,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                     isObject = putContext.isObject();
                   }
                   // Attempt to create the entry
-                  boolean result = false;
+                  boolean result;
                   if (isPdxEvent) {
                     result = addPdxType(crHelper, key, value);
                   } else {
@@ -325,7 +313,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                     // attempt to update the entry
                     if (!result) {
                       result = region.basicBridgePut(key, value, null, isObject, callbackArg,
-                          serverConnection.getProxyID(), false, clientEvent);
+                          serverConnection.getProxyID(), clientEvent, true);
                     }
                   }
 
@@ -336,13 +324,13 @@ public class GatewayReceiverCommand extends BaseCommand {
                   } else {
                     // This exception will be logged in the catch block below
                     throw new Exception(
-                        String.format(
+                        format(
                             "%s: Failed to create or update entry for region %s key %s value %s callbackArg %s",
                             serverConnection.getName(), regionName, key, valuePart, callbackArg));
                   }
                 }
               } catch (Exception e) {
-                logger.warn(String.format(
+                logger.warn(format(
                     "%s: Caught exception processing batch create request %s for %s events",
                     serverConnection.getName(), batchId, numberOfEvents), e);
                 handleException(removeOnException, stats, e);
@@ -350,13 +338,10 @@ public class GatewayReceiverCommand extends BaseCommand {
               break;
 
             case 1: // Update
+            case GatewaySenderEventImpl.UPDATE_ACTION_NO_GENERATE_CALLBACKS:
               try {
                 // Retrieve the value from the message parts (do not deserialize it)
                 valuePart = clientMessage.getPart(partNumber + 5);
-                // try {
-                // logger.warn(getName() + ": Updating key " + key + " value " +
-                // valuePart.getObject());
-                // } catch (Exception e) {}
 
                 // Retrieve the callbackArg from the message parts if necessary
                 index = partNumber + 6;
@@ -372,7 +357,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   } catch (Exception e) {
                     logger
                         .warn(
-                            String.format(
+                            format(
                                 "%s: Caught exception processing batch update request %s containing %s events",
                                 serverConnection.getName(), batchId, numberOfEvents),
                             e);
@@ -395,7 +380,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   if (regionName == null) {
                     message = "%s: The input region name for the batch update request %s is null";
                   }
-                  String s = String.format(message, serverConnection.getName(), batchId);
+                  String s = format(message, serverConnection.getName(), batchId);
                   logger.warn(s);
                   throw new Exception(s);
                 }
@@ -422,12 +407,14 @@ public class GatewayReceiverCommand extends BaseCommand {
                     value = putContext.getSerializedValue();
                     isObject = putContext.isObject();
                   }
-                  boolean result = false;
+                  final boolean result;
                   if (isPdxEvent) {
                     result = addPdxType(crHelper, key, value);
                   } else {
+                    boolean generateCallbacks =
+                        actionType != GatewaySenderEventImpl.UPDATE_ACTION_NO_GENERATE_CALLBACKS;
                     result = region.basicBridgePut(key, value, null, isObject, callbackArg,
-                        serverConnection.getProxyID(), false, clientEvent);
+                        serverConnection.getProxyID(), clientEvent, generateCallbacks);
                   }
                   if (result || clientEvent.isConcurrencyConflict()) {
                     serverConnection.setModificationInfo(true, regionName, key);
@@ -436,7 +423,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   } else {
                     final String message =
                         "%s: Failed to update entry for region %s, key %s, value %s, and callbackArg %s";
-                    String s = String.format(message, serverConnection.getName(), regionName,
+                    String s = format(message, serverConnection.getName(), regionName,
                         key, valuePart, callbackArg);
                     logger.info(s);
                     throw new Exception(s);
@@ -444,7 +431,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                 }
               } catch (Exception e) {
                 // Preserve the connection under all circumstances
-                logger.warn(String.format(
+                logger.warn(format(
                     "%s: Caught exception processing batch update request %s containing %s events",
                     serverConnection.getName(), batchId, numberOfEvents), e);
                 handleException(removeOnException, stats, e);
@@ -467,7 +454,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   } catch (Exception e) {
                     logger
                         .warn(
-                            String.format(
+                            format(
                                 "%s: Caught exception processing batch destroy request %s containing %s events",
                                 serverConnection.getName(), batchId, numberOfEvents),
                             e);
@@ -493,7 +480,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                     message =
                         "%s: The input region name for the batch destroy request %s is null";
                   }
-                  String s = String.format(message, serverConnection.getName(), batchId);
+                  String s = format(message, serverConnection.getName(), batchId);
                   logger.warn(s);
                   throw new Exception(s);
                 }
@@ -529,7 +516,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   retry = false;
                 }
               } catch (Exception e) {
-                logger.warn(String.format(
+                logger.warn(format(
                     "%s: Caught exception processing batch destroy request %s containing %s events",
                     serverConnection.getName(), batchId, numberOfEvents),
                     e);
@@ -575,7 +562,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   String message =
                       "%s: Caught exception processing batch update version request request %s containing %s events";
 
-                  String s = String.format(message, serverConnection.getName(),
+                  String s = format(message, serverConnection.getName(),
                       batchId, numberOfEvents);
                   logger.warn(s);
                   throw new Exception(s);
@@ -610,7 +597,7 @@ public class GatewayReceiverCommand extends BaseCommand {
                   }
                 }
               } catch (Exception e) {
-                logger.warn(String.format(
+                logger.warn(format(
                     "%s: Caught exception processing batch update version request request %s containing %s events",
                     serverConnection.getName(), batchId, numberOfEvents), e);
                 handleException(removeOnException, stats, e);
@@ -640,7 +627,7 @@ public class GatewayReceiverCommand extends BaseCommand {
         // If we have an issue with the PDX registry, stop processing more data
         if (e.getCause() instanceof PdxRegistryMismatchException) {
           fatalException = e.getCause();
-          logger.fatal(String.format(
+          logger.fatal(format(
               "This gateway receiver has received a PDX type from %s that does match the existing PDX type. This gateway receiver will not process any more events, in order to prevent receiving objects which may not be deserializable.",
               serverConnection.getMembershipID()), e.getCause());
           break;
@@ -649,7 +636,7 @@ public class GatewayReceiverCommand extends BaseCommand {
         // Increment the batch id unless the received batch id is -1 (a
         // failover batch)
         DistributedSystem ds = crHelper.getCacheForGatewayCommand().getDistributedSystem();
-        String exceptionMessage = String.format(
+        String exceptionMessage = format(
             "Exception occurred while processing a batch on the receiver running on DistributedSystem with Id: %s, DistributedMember on which the receiver is running: %s",
             ((InternalDistributedSystem) ds).getDistributionManager().getDistributedSystemId(),
             ds.getDistributedMember());
@@ -658,7 +645,8 @@ public class GatewayReceiverCommand extends BaseCommand {
         exceptions.add(be);
       } finally {
         // Increment the partNumber
-        if (actionType == 0 /* create */ || actionType == 1 /* update */) {
+        if (actionType == 0 /* create */ || actionType == 1 /* update */
+            || actionType == GatewaySenderEventImpl.UPDATE_ACTION_NO_GENERATE_CALLBACKS) {
           if (callbackArgExists) {
             partNumber += 9;
           } else {
@@ -687,11 +675,11 @@ public class GatewayReceiverCommand extends BaseCommand {
     }
     if (fatalException != null) {
       serverConnection.incrementLatestBatchIdReplied(batchId);
-      writeFatalException(clientMessage, fatalException, serverConnection, batchId);
+      writeFatalException(clientMessage, fatalException, serverConnection);
       serverConnection.setAsTrue(RESPONDED);
     } else if (!exceptions.isEmpty()) {
       serverConnection.incrementLatestBatchIdReplied(batchId);
-      writeBatchException(clientMessage, exceptions, serverConnection, batchId);
+      writeBatchException(clientMessage, exceptions, serverConnection);
       serverConnection.setAsTrue(RESPONDED);
     } else {
       // Increment the batch id unless the received batch id is -1 (a failover
@@ -727,7 +715,11 @@ public class GatewayReceiverCommand extends BaseCommand {
 
   private void handleException(boolean removeOnException, GatewayReceiverStats stats, Exception e)
       throws Exception {
-    if (shouldThrowException(removeOnException, e)) {
+    if (e instanceof CancelException) {
+      throw e;
+    }
+
+    if (shouldThrowException(removeOnException)) {
       throw e;
     } else {
       stats.incEventsRetried();
@@ -735,9 +727,9 @@ public class GatewayReceiverCommand extends BaseCommand {
     }
   }
 
-  private boolean shouldThrowException(boolean removeOnException, Exception e) {
+  private boolean shouldThrowException(boolean removeOnException) {
     // Split out in case specific exceptions would short-circuit retry logic.
-    // Currently it just considers the boolean.
+    // Currently, it just considers the boolean.
     return removeOnException;
   }
 
@@ -772,18 +764,15 @@ public class GatewayReceiverCommand extends BaseCommand {
   }
 
   private static void writeBatchException(Message origMsg, List<BatchException70> exceptions,
-      ServerConnection servConn, int batchId) throws IOException {
+      ServerConnection servConn) throws IOException {
     Message errorMsg = servConn.getErrorResponseMessage();
     errorMsg.setMessageType(MessageType.EXCEPTION);
     errorMsg.setNumberOfParts(2);
     errorMsg.setTransactionId(origMsg.getTransactionId());
-
     errorMsg.addObjPart(exceptions);
-    // errorMsg.addStringPart(be.toString());
     errorMsg.send(servConn);
-    for (Exception e : exceptions) {
-      ((GatewayReceiverStats) servConn.getCacheServerStats()).incExceptionsOccurred();
-    }
+    ((GatewayReceiverStats) servConn.getCacheServerStats())
+        .incExceptionsOccurred(exceptions.size());
     for (Exception be : exceptions) {
       if (logger.isWarnEnabled()) {
         logger.warn(servConn.getName() + ": Wrote batch exception: ",
@@ -793,24 +782,12 @@ public class GatewayReceiverCommand extends BaseCommand {
   }
 
   private static void writeFatalException(Message origMsg, Throwable exception,
-      ServerConnection servConn, int batchId) throws IOException {
+      ServerConnection servConn) throws IOException {
     Message errorMsg = servConn.getErrorResponseMessage();
     errorMsg.setMessageType(MessageType.EXCEPTION);
     errorMsg.setNumberOfParts(2);
     errorMsg.setTransactionId(origMsg.getTransactionId());
-
-    // For older gateway senders, we need to send back an exception
-    // they can deserialize.
-    if ((servConn.getClientVersion() == null
-        || servConn.getClientVersion().isOlderThan(KnownVersion.GFE_80))
-        && exception instanceof PdxRegistryMismatchException) {
-      PdxConfigurationException newException =
-          new PdxConfigurationException(exception.getMessage());
-      newException.setStackTrace(exception.getStackTrace());
-      exception = newException;
-    }
     errorMsg.addObjPart(exception);
-    // errorMsg.addStringPart(be.toString());
     errorMsg.send(servConn);
     logger.warn(servConn.getName() + ": Wrote batch exception: ",
         exception);

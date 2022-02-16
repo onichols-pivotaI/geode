@@ -20,7 +20,6 @@ import static org.junit.Assert.fail;
 
 import java.io.Serializable;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -36,13 +35,14 @@ import org.apache.geode.test.awaitility.GeodeAwaitility;
 import org.apache.geode.test.dunit.Assert;
 import org.apache.geode.test.dunit.IgnoredException;
 import org.apache.geode.test.junit.categories.AEQTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category({AEQTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class CommonAsyncEventQueueDUnitTest extends AsyncEventQueueTestBase {
 
   private static final long serialVersionUID = 1L;
-  private static MyAsyncEventListener myAsyncEventListener = new MyAsyncEventListener();
+  private static final MyAsyncEventListener myAsyncEventListener = new MyAsyncEventListener();
 
   public CommonAsyncEventQueueDUnitTest() {
     super();
@@ -77,7 +77,7 @@ public class CommonAsyncEventQueueDUnitTest extends AsyncEventQueueTestBase {
   public void testSameSenderWithNonColocatedRegions() throws Exception {
     IgnoredException.addIgnoredException("cannot have the same parallel async");
     Integer lnPort =
-        (Integer) vm0.invoke(() -> AsyncEventQueueTestBase.createFirstLocatorWithDSId(1));
+        vm0.invoke(() -> AsyncEventQueueTestBase.createFirstLocatorWithDSId(1));
     vm1.invoke(() -> AsyncEventQueueTestBase.createCache(lnPort));
     vm1.invoke(() -> AsyncEventQueueTestBase.createAsyncEventQueue("ln", true, 100, 100, false,
         false, null, false));
@@ -104,7 +104,7 @@ public class CommonAsyncEventQueueDUnitTest extends AsyncEventQueueTestBase {
     String regionName = getTestMethodName() + "_PR1";
 
     Integer lnPort =
-        (Integer) vm0.invoke(() -> AsyncEventQueueTestBase.createFirstLocatorWithDSId(1));
+        vm0.invoke(() -> AsyncEventQueueTestBase.createFirstLocatorWithDSId(1));
     vm1.invoke(() -> AsyncEventQueueTestBase.createCache(lnPort));
 
     vm1.invoke(() -> {

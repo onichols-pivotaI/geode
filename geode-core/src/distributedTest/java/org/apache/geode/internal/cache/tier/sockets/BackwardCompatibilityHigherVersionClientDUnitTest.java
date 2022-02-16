@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.Properties;
 
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -48,12 +49,17 @@ import org.apache.geode.test.dunit.NetworkUtils;
 import org.apache.geode.test.dunit.VM;
 import org.apache.geode.test.dunit.internal.JUnit4DistributedTestCase;
 import org.apache.geode.test.junit.categories.ClientServerTest;
+import org.apache.geode.test.junit.rules.IgnoreOnWindowsRule;
 
 /**
  * Test to verify that server responds to a higher versioned client.
  */
 @Category({ClientServerTest.class})
 public class BackwardCompatibilityHigherVersionClientDUnitTest extends JUnit4DistributedTestCase {
+  // On Windows, when the server closes the socket, the client can't read the server's reply. The
+  // client quietly ignores the server's reply rather than throwing the required exception.
+  @ClassRule
+  public static IgnoreOnWindowsRule ignoreOnWindowsRule = new IgnoreOnWindowsRule();
 
   /** the cache */
   private static Cache cache = null;
@@ -76,7 +82,7 @@ public class BackwardCompatibilityHigherVersionClientDUnitTest extends JUnit4Dis
 
   private static final String client_k2 = "client-k2";
 
-  private static short currentClientVersion = ConnectionProxy.VERSION.ordinal();
+  private static final short currentClientVersion = ConnectionProxy.VERSION.ordinal();
 
   @Override
   public final void postSetUp() throws Exception {
@@ -101,7 +107,7 @@ public class BackwardCompatibilityHigherVersionClientDUnitTest extends JUnit4Dis
     props.setProperty(MCAST_PORT, "0");
     props.setProperty(LOCATORS, "");
     new BackwardCompatibilityHigherVersionClientDUnitTest().createCache(props);
-    PoolImpl p = (PoolImpl) PoolManager.createFactory().addServer(host, port1.intValue())
+    PoolImpl p = (PoolImpl) PoolManager.createFactory().addServer(host, port1)
         .setSubscriptionEnabled(true).setSubscriptionRedundancy(1).setMinConnections(1)
         .setFreeConnectionTimeout(200000).setReadTimeout(200000).setPingInterval(10000)
         .setRetryAttempts(1).setSubscriptionAckInterval(CLIENT_ACK_INTERVAL)
@@ -128,21 +134,21 @@ public class BackwardCompatibilityHigherVersionClientDUnitTest extends JUnit4Dis
     server1.setPort(port);
     server1.setNotifyBySubscription(true);
     server1.start();
-    return new Integer(server1.getPort());
+    return server1.getPort();
 
   }
 
   @Override
   public final void postTearDown() throws Exception {
     client1.invoke(
-        () -> BackwardCompatibilityHigherVersionClientDUnitTest.unsetHandshakeVersionForTesting());
+        BackwardCompatibilityHigherVersionClientDUnitTest::unsetHandshakeVersionForTesting);
     client1.invoke(
-        () -> BackwardCompatibilityHigherVersionClientDUnitTest.unsetConnectionToServerFailed());
+        BackwardCompatibilityHigherVersionClientDUnitTest::unsetConnectionToServerFailed);
 
     // close the clients first
-    client1.invoke(() -> BackwardCompatibilityHigherVersionClientDUnitTest.closeCache());
+    client1.invoke(BackwardCompatibilityHigherVersionClientDUnitTest::closeCache);
     // then close the servers
-    server1.invoke(() -> BackwardCompatibilityHigherVersionClientDUnitTest.closeCache());
+    server1.invoke(BackwardCompatibilityHigherVersionClientDUnitTest::closeCache);
   }
 
   public static void closeCache() {
@@ -159,10 +165,10 @@ public class BackwardCompatibilityHigherVersionClientDUnitTest extends JUnit4Dis
   @Test
   public void testHigherVersionedClient() {
     Integer port1 = (server1
-        .invoke(() -> BackwardCompatibilityHigherVersionClientDUnitTest.createServerCache()));
+        .invoke(BackwardCompatibilityHigherVersionClientDUnitTest::createServerCache));
 
     client1.invoke(
-        () -> BackwardCompatibilityHigherVersionClientDUnitTest.setHandshakeVersionForTesting());
+        BackwardCompatibilityHigherVersionClientDUnitTest::setHandshakeVersionForTesting);
 
     assertThatThrownBy(() -> client1.invoke(() -> BackwardCompatibilityHigherVersionClientDUnitTest
         .createClientCache(NetworkUtils.getServerHostName(server1.getHost()), port1)))
@@ -170,7 +176,7 @@ public class BackwardCompatibilityHigherVersionClientDUnitTest extends JUnit4Dis
             .hasMessageContaining("refused connection: Peer or client version with ordinal");
 
     client1.invoke(
-        () -> BackwardCompatibilityHigherVersionClientDUnitTest.verifyConnectionToServerFailed());
+        BackwardCompatibilityHigherVersionClientDUnitTest::verifyConnectionToServerFailed);
   }
 
   /*

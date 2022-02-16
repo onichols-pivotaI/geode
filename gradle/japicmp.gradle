@@ -22,13 +22,14 @@ import org.apache.maven.artifact.versioning.DefaultArtifactVersion
 import org.apache.geode.gradle.japicmp.AllowMajorBreakingChanges
 import org.apache.geode.gradle.japicmp.ParentIsExperimental
 import org.apache.geode.gradle.japicmp.GeodeApiRegressionRule
+import org.apache.geode.gradle.japicmp.GeodeSpiRegressionRule
 
 
 def mostRecentReleaseProj = project(':geode-old-versions').subprojects.max(){ v -> new ComparableVersion(v.name)}
 def newest = mostRecentReleaseProj.name
 
 tasks.register('japicmp', me.champeau.gradle.japicmp.JapicmpTask) {
-  inputs.files { configurations.geodeArchives }
+  inputs.files { configurations.runtimeClasspath}
   def ourUnpackTaskProvider = project(":geode-old-versions:${newest}").tasks.named('downloadAndUnzipFile')
   inputs.files { ourUnpackTaskProvider }
 
@@ -40,14 +41,14 @@ tasks.register('japicmp', me.champeau.gradle.japicmp.JapicmpTask) {
   doFirst {
     oldClasspath = files(file(d).listFiles())
     oldArchives = files(file(d).listFiles(new FilenameFilter() {
-      public boolean accept(File dir, String name) {
-        return name.toLowerCase().startsWith("geode-") && name.toLowerCase().endsWith(".jar");
+      boolean accept(File dir, String name) {
+        return name.toLowerCase().startsWith("geode-") && name.toLowerCase().endsWith(".jar")
       };
     }))
   }
 
-  newClasspath = configurations.geodeArchives
-  newArchives = configurations.geodeArchives.filter { File f ->
+  newClasspath = configurations.runtimeClasspath
+  newArchives = configurations.runtimeClasspath.filter { File f ->
     f.toString().contains("geode-") && f.toString().endsWith(".jar")
   }
 
@@ -73,21 +74,22 @@ tasks.register('japicmp', me.champeau.gradle.japicmp.JapicmpTask) {
   packageIncludes = ['org.apache.geode.*']
   annotationExcludes = ['@org.apache.geode.annotations.Experimental']
 
- richReport {
-   title = "Geode API Compatibility Report"
-   description = "Comparing current ${version} against downloaded v${newest}."
-   reportName = "rich-report-${reportFileName}.html"
-   outputs.files {
-     reportName
-   }
+  richReport {
+    title = "Geode API Compatibility Report"
+    description = "Comparing current ${version} against downloaded v${newest}."
+    reportName = "rich-report-${reportFileName}.html"
+    outputs.files {
+      reportName
+    }
 
-   if (allowMajorBreaking) {
-     addRule(AllowMajorBreakingChanges)
-   } else {
-     addRule(JApiChangeStatus.REMOVED, ParentIsExperimental)
-     addRule(JApiChangeStatus.MODIFIED, ParentIsExperimental)
-     addRule(GeodeApiRegressionRule)
-   }
-   addDefaultRules = true
- }
+    if (allowMajorBreaking) {
+      addRule(AllowMajorBreakingChanges)
+    } else {
+      addRule(JApiChangeStatus.REMOVED, ParentIsExperimental)
+      addRule(JApiChangeStatus.MODIFIED, ParentIsExperimental)
+      addRule(GeodeApiRegressionRule)
+      addRule(GeodeSpiRegressionRule)
+    }
+    addDefaultRules = true
+  }
 }

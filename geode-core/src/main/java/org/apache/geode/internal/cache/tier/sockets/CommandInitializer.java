@@ -64,6 +64,7 @@ import org.apache.geode.internal.cache.tier.sockets.command.Put70;
 import org.apache.geode.internal.cache.tier.sockets.command.PutAll80;
 import org.apache.geode.internal.cache.tier.sockets.command.PutAllWithCallback;
 import org.apache.geode.internal.cache.tier.sockets.command.PutUserCredentials;
+import org.apache.geode.internal.cache.tier.sockets.command.Query;
 import org.apache.geode.internal.cache.tier.sockets.command.Query651;
 import org.apache.geode.internal.cache.tier.sockets.command.QueryGeode10;
 import org.apache.geode.internal.cache.tier.sockets.command.QueryWithParametersGeode10;
@@ -202,8 +203,9 @@ public class CommandInitializer implements CommandRegistry {
     allCommands.put(KnownVersion.GEODE_1_12_0, geode18Commands);
     allCommands.put(KnownVersion.GEODE_1_12_1, geode18Commands);
     allCommands.put(KnownVersion.GEODE_1_13_0, geode18Commands);
-    allCommands.put(KnownVersion.GEODE_1_13_1, geode18Commands);
+    allCommands.put(KnownVersion.GEODE_1_13_2, geode18Commands);
     allCommands.put(KnownVersion.GEODE_1_14_0, geode18Commands);
+    allCommands.put(KnownVersion.GEODE_1_15_0, geode18Commands);
 
     // as of GEODE_1_15_0 we only create new command sets when the
     // client/server protocol changes
@@ -242,8 +244,7 @@ public class CommandInitializer implements CommandRegistry {
 
   static void initializeGfe81Commands(final Map<Integer, Command> commands) {
     commands.put(MessageType.PING, Ping.getCommand());
-    commands.put(MessageType.QUERY,
-        org.apache.geode.internal.cache.tier.sockets.command.Query.getCommand());
+    commands.put(MessageType.QUERY, Query.getCommand());
     commands.put(MessageType.CLEAR_REGION, ClearRegion.getCommand());
     commands.put(MessageType.DESTROY_REGION, DestroyRegion.getCommand());
     commands.put(MessageType.UNREGISTER_INTEREST, UnregisterInterest.getCommand());

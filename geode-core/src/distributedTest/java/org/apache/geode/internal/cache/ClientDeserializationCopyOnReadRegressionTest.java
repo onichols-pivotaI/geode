@@ -16,7 +16,6 @@ package org.apache.geode.internal.cache;
 
 import static org.apache.geode.distributed.ConfigurationProperties.DELTA_PROPAGATION;
 import static org.apache.geode.internal.lang.SystemPropertyHelper.EARLY_ENTRY_EVENT_SERIALIZATION;
-import static org.apache.geode.internal.lang.SystemPropertyHelper.GEODE_PREFIX;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -29,7 +28,6 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import junitparams.JUnitParamsRunner;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -52,11 +50,13 @@ import org.apache.geode.internal.cache.ha.HARegionQueue;
 import org.apache.geode.internal.cache.tier.sockets.CacheClientProxy;
 import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
 import org.apache.geode.internal.cache.tier.sockets.ClientUpdateMessageImpl;
+import org.apache.geode.internal.lang.SystemProperty;
 import org.apache.geode.test.dunit.Invoke;
 import org.apache.geode.test.dunit.NetworkUtils;
 import org.apache.geode.test.dunit.VM;
 import org.apache.geode.test.dunit.rules.DistributedRestoreSystemProperties;
 import org.apache.geode.test.junit.categories.ClientServerTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 /**
  * Client side deserialization should not throw EOFException when copy-on-read is true.
@@ -67,13 +67,13 @@ import org.apache.geode.test.junit.categories.ClientServerTest;
  * @since GemFire bugfix5.7
  */
 @Category({ClientServerTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 @SuppressWarnings("serial")
 public class ClientDeserializationCopyOnReadRegressionTest extends ClientServerTestCase {
 
-  private String k1 = "k1";
-  private String k2 = "k2";
-  private String k3 = "k3";
+  private final String k1 = "k1";
+  private final String k2 = "k2";
+  private final String k3 = "k3";
 
   private VM client;
   private VM server;
@@ -113,9 +113,10 @@ public class ClientDeserializationCopyOnReadRegressionTest extends ClientServerT
   @Test
 
   public void testCopyOnReadWithBridgeServer() {
-    System.setProperty(GEODE_PREFIX + EARLY_ENTRY_EVENT_SERIALIZATION, "true");
+    System.setProperty(SystemProperty.DEFAULT_PREFIX + EARLY_ENTRY_EVENT_SERIALIZATION, "true");
     Invoke.invokeInEveryVM(
-        () -> System.setProperty(GEODE_PREFIX + EARLY_ENTRY_EVENT_SERIALIZATION, "true"));
+        () -> System.setProperty(SystemProperty.DEFAULT_PREFIX + EARLY_ENTRY_EVENT_SERIALIZATION,
+            "true"));
 
     createBridgeServer(server, rName, ports[0]);
     // Put an instance of SerializationCounter to assert copy-on-read behavior

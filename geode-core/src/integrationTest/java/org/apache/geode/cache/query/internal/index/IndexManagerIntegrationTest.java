@@ -26,7 +26,6 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.stream.IntStream;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import junitparams.naming.TestCaseName;
 import org.junit.Before;
@@ -49,9 +48,10 @@ import org.apache.geode.internal.cache.InternalRegion;
 import org.apache.geode.test.assertj.LogFileAssert;
 import org.apache.geode.test.junit.categories.OQLIndexTest;
 import org.apache.geode.test.junit.rules.ServerStarterRule;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category(OQLIndexTest.class)
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class IndexManagerIntegrationTest {
   private File logFile;
   private final int entries = 100;
@@ -71,7 +71,8 @@ public class IndexManagerIntegrationTest {
     TestQueryObject.throwException = false;
 
     logFile = temporaryFolder.newFile(testName.getMethodName() + ".log");
-    serverStarterRule.withProperty("log-file", logFile.getAbsolutePath()).startServer();
+    serverStarterRule.withProperty("log-file", logFile.getAbsolutePath())
+        .withProperty("log-level", "debug").startServer();
     internalCache = serverStarterRule.getCache();
   }
 
@@ -144,6 +145,7 @@ public class IndexManagerIntegrationTest {
         .contains(String.format(
             "Updating the Index %s failed. The index is corrupted and marked as invalid.",
             indexName));
+    LogFileAssert.assertThat(logFile).contains("Corrupted key is " + newKey);
   }
 
   @Test
@@ -171,6 +173,7 @@ public class IndexManagerIntegrationTest {
         .contains(String.format(
             "Updating the Index %s failed. The index is corrupted and marked as invalid.",
             indexName));
+    LogFileAssert.assertThat(logFile).contains("Corrupted key is " + existingKey);
   }
 
   @Test
@@ -213,6 +216,7 @@ public class IndexManagerIntegrationTest {
         .contains(String.format(
             "Updating the Index %s failed. The index is corrupted and marked as invalid.",
             indexName));
+    LogFileAssert.assertThat(logFile).contains("Corrupted key is " + existingKey);
   }
 
   private static class TestQueryObject implements Serializable {

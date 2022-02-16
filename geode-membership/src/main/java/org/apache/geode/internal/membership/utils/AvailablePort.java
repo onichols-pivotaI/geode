@@ -14,6 +14,8 @@
  */
 package org.apache.geode.internal.membership.utils;
 
+import static org.apache.geode.distributed.internal.membership.api.MembershipConfig.DEFAULT_MCAST_ADDRESS;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Serializable;
@@ -32,7 +34,6 @@ import java.util.Enumeration;
 import java.util.Random;
 
 import org.apache.geode.annotations.Immutable;
-import org.apache.geode.distributed.internal.membership.api.MembershipConfig;
 import org.apache.geode.internal.inet.LocalHostUtil;
 import org.apache.geode.util.internal.GeodeGlossary;
 
@@ -41,12 +42,22 @@ import org.apache.geode.util.internal.GeodeGlossary;
  * selected available port.
  */
 public class AvailablePort {
-  public static final int AVAILABLE_PORTS_LOWER_BOUND = 20001;// 20000/udp is securid
-  public static final int AVAILABLE_PORTS_UPPER_BOUND = 29999;// 30000/tcp is spoolfax
+  private static final String LOWER_BOUND_PROPERTY = "AvailablePort.lowerBound";
+  private static final String UPPER_BOUND_PROPERTY = "AvailablePort.upperBound";
+  private static final int DEFAULT_PORT_RANGE_LOWER_BOUND = 20001; // 20000/udp is securid
+  private static final int DEFAULT_PORT_RANGE_UPPER_BOUND = 29999; // 30000/tcp is spoolfax
+  public static final int AVAILABLE_PORTS_LOWER_BOUND =
+      Integer.getInteger(LOWER_BOUND_PROPERTY, DEFAULT_PORT_RANGE_LOWER_BOUND);
+  public static final int AVAILABLE_PORTS_UPPER_BOUND =
+      Integer.getInteger(UPPER_BOUND_PROPERTY, DEFAULT_PORT_RANGE_UPPER_BOUND);
 
-  /** Is the port available for a Socket (TCP) connection? */
+  /**
+   * Is the port available for a Socket (TCP) connection?
+   */
   public static final int SOCKET = 0;
-  /** Is the port available for a JGroups (UDP) multicast connection */
+  /**
+   * Is the port available for a JGroups (UDP) multicast connection
+   */
   public static final int MULTICAST = 1;
 
   /**
@@ -75,7 +86,6 @@ public class AvailablePort {
    *
    * @param port The port to check
    * @param protocol The protocol to check (either {@link #SOCKET} or {@link #MULTICAST}).
-   *
    * @throws IllegalArgumentException <code>protocol</code> is unknown
    */
   public static boolean isPortAvailable(final int port, int protocol) {
@@ -88,7 +98,6 @@ public class AvailablePort {
    * @param port The port to check
    * @param protocol The protocol to check (either {@link #SOCKET} or {@link #MULTICAST}).
    * @param addr the bind address (or mcast address) to use
-   *
    * @throws IllegalArgumentException <code>protocol</code> is unknown
    */
   public static boolean isPortAvailable(final int port, int protocol, InetAddress addr) {
@@ -99,30 +108,26 @@ public class AvailablePort {
       } else {
         return testOneInterface(addr, port);
       }
-    }
-
-    else if (protocol == MULTICAST) {
+    } else if (protocol == MULTICAST) {
       MulticastSocket socket = null;
       try {
         socket = new MulticastSocket();
         InetAddress localHost = LocalHostUtil.getLocalHost();
         socket.setInterface(localHost);
-        socket.setSoTimeout(Integer.getInteger("AvailablePort.timeout", 2000).intValue());
+        socket.setSoTimeout(Integer.getInteger("AvailablePort.timeout", 2000));
         socket.setReuseAddress(true);
         byte[] buffer = new byte[4];
         buffer[0] = (byte) 'p';
         buffer[1] = (byte) 'i';
         buffer[2] = (byte) 'n';
         buffer[3] = (byte) 'g';
-        InetAddress mcid =
-            addr == null ? InetAddress.getByName(MembershipConfig.DEFAULT_MCAST_ADDRESS) : addr;
+        InetAddress mcid = addr == null ? InetAddress.getByName(DEFAULT_MCAST_ADDRESS) : addr;
         SocketAddress mcaddr = new InetSocketAddress(mcid, port);
         socket.joinGroup(mcid);
         DatagramPacket packet = new DatagramPacket(buffer, 0, buffer.length, mcaddr);
         socket.send(packet);
         try {
           socket.receive(packet);
-          packet.getData(); // make sure there's data, but no need to process it
           return false;
         } catch (SocketTimeoutException ste) {
           // System.out.println("socket read timed out");
@@ -150,11 +155,8 @@ public class AvailablePort {
           }
         }
       }
-    }
-
-    else {
-      throw new IllegalArgumentException(String.format("Unknown protocol: %s",
-          Integer.valueOf(protocol)));
+    } else {
+      throw new IllegalArgumentException(String.format("Unknown protocol: %d", protocol));
     }
   }
 
@@ -169,8 +171,7 @@ public class AvailablePort {
     } else if (protocol == MULTICAST) {
       throw new IllegalArgumentException("You can not keep the JGROUPS protocol");
     } else {
-      throw new IllegalArgumentException(String.format("Unknown protocol: %s",
-          Integer.valueOf(protocol)));
+      throw new IllegalArgumentException(String.format("Unknown protocol: %d", protocol));
     }
   }
 
@@ -223,8 +224,7 @@ public class AvailablePort {
       if (server != null) {
         try {
           server.close();
-        } catch (Exception ex) {
-
+        } catch (Exception ignored) {
         }
       }
     }
@@ -260,17 +260,17 @@ public class AvailablePort {
     // Note that we still need the check of the wildcard address, above,
     // because on some systems (aix) we can still bind to specific addresses
     // if someone else has bound to the wildcard address.
-    Enumeration en;
+    Enumeration<NetworkInterface> interfaces;
     try {
-      en = NetworkInterface.getNetworkInterfaces();
+      interfaces = NetworkInterface.getNetworkInterfaces();
     } catch (SocketException e) {
       throw new RuntimeException(e);
     }
-    while (en.hasMoreElements()) {
-      NetworkInterface next = (NetworkInterface) en.nextElement();
-      Enumeration en2 = next.getInetAddresses();
-      while (en2.hasMoreElements()) {
-        InetAddress addr = (InetAddress) en2.nextElement();
+    while (interfaces.hasMoreElements()) {
+      NetworkInterface next = interfaces.nextElement();
+      Enumeration<InetAddress> addresses = next.getInetAddresses();
+      while (addresses.hasMoreElements()) {
+        InetAddress addr = addresses.nextElement();
         boolean available = testOneInterface(addr, port);
         if (!available) {
           return null;
@@ -285,7 +285,6 @@ public class AvailablePort {
    * Returns a randomly selected available port in the range 5001 to 32767.
    *
    * @param protocol The protocol to check (either {@link #SOCKET} or {@link #MULTICAST}).
-   *
    * @throws IllegalArgumentException <code>protocol</code> is unknown
    */
   public static int getRandomAvailablePort(int protocol) {
@@ -297,31 +296,15 @@ public class AvailablePort {
    *
    * @param protocol The protocol to check (either {@link #SOCKET} or {@link #MULTICAST}).
    * @param addr the bind-address or mcast address to use
-   *
    * @throws IllegalArgumentException <code>protocol</code> is unknown
    */
   public static int getRandomAvailablePort(int protocol, InetAddress addr) {
-    return getRandomAvailablePort(protocol, addr, false);
-  }
-
-  /**
-   * Returns a randomly selected available port in the range 5001 to 32767.
-   *
-   * @param protocol The protocol to check (either {@link #SOCKET} or {@link #MULTICAST}).
-   * @param addr the bind-address or mcast address to use
-   * @param useMembershipPortRange use true if the port will be used for membership
-   *
-   * @throws IllegalArgumentException <code>protocol</code> is unknown
-   */
-  public static int getRandomAvailablePort(int protocol, InetAddress addr,
-      boolean useMembershipPortRange) {
     while (true) {
-      int port = getRandomWildcardBindPortNumber(useMembershipPortRange);
+      int port =
+          rand.nextInt(AVAILABLE_PORTS_UPPER_BOUND - AVAILABLE_PORTS_LOWER_BOUND)
+              + AVAILABLE_PORTS_LOWER_BOUND;
       if (isPortAvailable(port, protocol, addr)) {
-        // don't return the products default multicast port
-        if (!(protocol == MULTICAST && port == MembershipConfig.DEFAULT_MCAST_PORT)) {
-          return port;
-        }
+        return port;
       }
     }
   }
@@ -338,28 +321,14 @@ public class AvailablePort {
     }
   }
 
-  private static int getRandomWildcardBindPortNumber(boolean useMembershipPortRange) {
-    int rangeBase;
-    int rangeTop;
-    if (!useMembershipPortRange) {
-      rangeBase = AVAILABLE_PORTS_LOWER_BOUND; // 20000/udp is securid
-      rangeTop = AVAILABLE_PORTS_UPPER_BOUND; // 30000/tcp is spoolfax
-    } else {
-      rangeBase = MembershipConfig.DEFAULT_MEMBERSHIP_PORT_RANGE[0];
-      rangeTop = MembershipConfig.DEFAULT_MEMBERSHIP_PORT_RANGE[1];
-    }
-
-    return rand.nextInt(rangeTop - rangeBase) + rangeBase;
-  }
-
   public static int getRandomAvailablePortInRange(int rangeBase, int rangeTop, int protocol) {
     int numberOfPorts = rangeTop - rangeBase;
     // do "5 times the numberOfPorts" iterations to select a port number. This will ensure that
     // each of the ports from given port range get a chance at least once
     int numberOfRetrys = numberOfPorts * 5;
     for (int i = 0; i < numberOfRetrys; i++) {
-      int port = rand.nextInt(numberOfPorts + 1) + rangeBase;// add 1 to numberOfPorts so that
-                                                             // rangeTop also gets included
+      // add 1 to numberOfPorts so that rangeTop also gets included
+      int port = rand.nextInt(numberOfPorts + 1) + rangeBase;
       if (isPortAvailable(port, protocol, getAddress(protocol))) {
         return port;
       }
@@ -370,7 +339,6 @@ public class AvailablePort {
   /**
    * This class will keep an allocated port allocated until it is used. This makes the window
    * smaller that can cause bug 46690
-   *
    */
   public static class Keeper implements Serializable {
     private final transient ServerSocket ss;
@@ -387,7 +355,7 @@ public class AvailablePort {
     }
 
     public int getPort() {
-      return this.port;
+      return port;
     }
 
     /**
@@ -395,8 +363,8 @@ public class AvailablePort {
      */
     public void release() {
       try {
-        if (this.ss != null) {
-          this.ss.close();
+        if (ss != null) {
+          ss.close();
         }
       } catch (IOException ignore) {
       }
@@ -413,10 +381,11 @@ public class AvailablePort {
   private static void usage(String s) {
     err.println("\n** " + s + "\n");
     err.println("usage: java AvailablePort socket|jgroups [\"addr\" network-address] [port]");
-    err.println("");
+    err.println();
     err.println(
-        "This program either prints whether or not a port is available for a given protocol, or it prints out an available port for a given protocol.");
-    err.println("");
+        "This program either prints whether or not a port is available for a given protocol, "
+            + "or it prints out an available port for a given protocol.");
+    err.println();
     System.exit(1);
   }
 

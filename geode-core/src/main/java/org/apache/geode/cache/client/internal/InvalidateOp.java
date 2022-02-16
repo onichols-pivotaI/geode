@@ -15,6 +15,7 @@
 package org.apache.geode.cache.client.internal;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.Operation;
@@ -69,7 +70,7 @@ public class InvalidateOp {
           op.setAllowDuplicateMetadataRefresh(!onlyUseExistingCnx);
           return pool.executeOn(new ServerLocation(server.getHostName(), server.getPort()), op,
               true, onlyUseExistingCnx);
-        } catch (AllConnectionsInUseException e) {
+        } catch (AllConnectionsInUseException ignored) {
         } catch (ServerConnectivityException e) {
           if (e instanceof ServerOperationException) {
             throw e; // fixed 44656
@@ -86,7 +87,7 @@ public class InvalidateOp {
   }
 
   private static class InvalidateOpImpl extends AbstractOp {
-    private EntryEventImpl event;
+    private final EntryEventImpl event;
 
     private boolean prSingleHopEnabled = false;
 
@@ -113,13 +114,14 @@ public class InvalidateOp {
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       throw new UnsupportedOperationException();
     }
 
 
     @Override
-    protected Object processResponse(Message msg, Connection con) throws Exception {
+    protected Object processResponse(final @NotNull Message msg, final @NotNull Connection con)
+        throws Exception {
       processAck(msg, "invalidate");
       boolean isReply = (msg.getMessageType() == MessageType.REPLY);
       int partIdx = 0;
@@ -130,7 +132,7 @@ public class InvalidateOp {
           VersionTag tag = (VersionTag) msg.getPart(partIdx++).getObject();
           // we use the client's ID since we apparently don't track the server's ID in connections
           tag.replaceNullIDs((InternalDistributedMember) con.getEndpoint().getMemberId());
-          this.event.setVersionTag(tag);
+          event.setVersionTag(tag);
           if (logger.isDebugEnabled()) {
             logger.debug("received Invalidate response with {}", tag);
           }
@@ -145,7 +147,7 @@ public class InvalidateOp {
         byte[] bytesReceived = part.getSerializedForm();
         if (bytesReceived[0] != ClientMetadataService.INITIAL_VERSION
             && bytesReceived.length == ClientMetadataService.SIZE_BYTES_ARRAY_RECEIVED) {
-          if (this.region != null) {
+          if (region != null) {
             try {
               ClientMetadataService cms = region.getCache().getClientMetadataService();
               int myVersion =

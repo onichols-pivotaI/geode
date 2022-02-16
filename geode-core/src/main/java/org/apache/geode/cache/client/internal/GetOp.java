@@ -15,6 +15,7 @@
 package org.apache.geode.cache.client.internal;
 
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.CacheLoaderException;
@@ -71,12 +72,12 @@ public class GetOp {
       if (server != null) {
         try {
           PoolImpl poolImpl = (PoolImpl) pool;
-          boolean onlyUseExistingCnx = ((poolImpl.getMaxConnections() != -1
-              && poolImpl.getConnectionCount() >= poolImpl.getMaxConnections()) ? true : false);
+          boolean onlyUseExistingCnx = (poolImpl.getMaxConnections() != -1
+              && poolImpl.getConnectionCount() >= poolImpl.getMaxConnections());
           op.setAllowDuplicateMetadataRefresh(!onlyUseExistingCnx);
           return pool.executeOn(new ServerLocation(server.getHostName(), server.getPort()), op,
               true, onlyUseExistingCnx);
-        } catch (AllConnectionsInUseException e) {
+        } catch (AllConnectionsInUseException ignored) {
         } catch (ServerConnectivityException e) {
           if (e instanceof ServerOperationException) {
             throw e; // fixed 44656
@@ -103,11 +104,11 @@ public class GetOp {
 
     private boolean prSingleHopEnabled = false;
 
-    private Object key;
+    private final Object key;
 
-    private Object callbackArg;
+    private final Object callbackArg;
 
-    private EntryEventImpl clientEvent;
+    private final EntryEventImpl clientEvent;
 
     public String toString() {
       return "GetOpImpl(key=" + key + ")";
@@ -135,12 +136,13 @@ public class GetOp {
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       throw new UnsupportedOperationException(); // version tag processing requires the connection
     }
 
     @Override
-    protected Object processResponse(Message msg, Connection con) throws Exception {
+    protected Object processResponse(final @NotNull Message msg, final @NotNull Connection con)
+        throws Exception {
       Object object = processObjResponse(msg, "get");
       if (msg.getNumberOfParts() > 1) {
         int partIdx = 1;
@@ -158,8 +160,8 @@ public class GetOp {
           assert con.getEndpoint() != null; // for debugging
           assert tag != null; // for debugging
           tag.replaceNullIDs((InternalDistributedMember) con.getEndpoint().getMemberId());
-          if (this.clientEvent != null) {
-            this.clientEvent.setVersionTag(tag);
+          if (clientEvent != null) {
+            clientEvent.setVersionTag(tag);
           }
           if ((flags & KEY_NOT_PRESENT) != 0) {
             object = Token.TOMBSTONE;
@@ -191,7 +193,7 @@ public class GetOp {
             Part part = msg.getPart(partIdx++);
             if (part.isBytes()) {
               byte[] bytesReceived = part.getSerializedForm();
-              if (this.region != null
+              if (region != null
                   && bytesReceived.length == ClientMetadataService.SIZE_BYTES_ARRAY_RECEIVED) {
                 ClientMetadataService cms;
                 try {

@@ -26,7 +26,6 @@ import static org.junit.Assert.fail;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.awaitility.core.ConditionTimeoutException;
 import org.junit.After;
@@ -42,21 +41,23 @@ import org.apache.geode.cache.asyncqueue.AsyncEventQueueFactory;
 import org.apache.geode.cache.asyncqueue.internal.AsyncEventQueueImpl;
 import org.apache.geode.cache.wan.GatewayEventFilter;
 import org.apache.geode.cache.wan.GatewaySender.OrderPolicy;
+import org.apache.geode.internal.cache.RegionQueue;
 import org.apache.geode.internal.cache.wan.AsyncEventQueueConfigurationException;
 import org.apache.geode.internal.cache.wan.MyAsyncEventListener;
 import org.apache.geode.internal.cache.wan.MyGatewayEventFilter;
 import org.apache.geode.test.junit.categories.AEQTest;
+import org.apache.geode.test.junit.runners.GeodeParamsRunner;
 
 @Category({AEQTest.class})
-@RunWith(JUnitParamsRunner.class)
+@RunWith(GeodeParamsRunner.class)
 public class AsyncEventQueueValidationsJUnitTest {
 
   private Cache cache;
 
   @After
   public void closeCache() {
-    if (this.cache != null) {
-      this.cache.close();
+    if (cache != null) {
+      cache.close();
     }
   }
 
@@ -187,7 +188,7 @@ public class AsyncEventQueueValidationsJUnitTest {
 
     // Ensure that the queue is filling up
     await().atMost(60, TimeUnit.SECONDS).until(() -> ((AsyncEventQueueImpl) aeq).getSender()
-        .getQueues().stream().mapToInt(i -> i.size()).sum() == 1000);
+        .getQueues().stream().mapToInt(RegionQueue::size).sum() == 1000);
 
     // Unpause the sender
     aeq.resumeEventDispatching();

@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.stream.Collectors;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -82,16 +83,18 @@ public class GfshParserAutoCompletionIntegrationTest {
   public void testCompletionDeploy() {
     String buffer = "deploy";
     CommandCandidate candidate = gfshParserRule.complete(buffer);
-    assertThat(candidate.getCandidates()).hasSize(6);
-    assertThat(candidate.getFirstCandidate()).isEqualTo(buffer + " --dir");
+    assertThat(candidate.getCandidates()
+        .stream().map(completion -> completion.getValue().trim()).collect(Collectors.toList()))
+            .containsExactlyInAnyOrder("--dir", "--jar", "--jars", "--group", "--groups");
   }
 
   @Test
   public void testCompletionDeployWithSpace() {
     String buffer = "deploy ";
     CommandCandidate candidate = gfshParserRule.complete(buffer);
-    assertThat(candidate.getCandidates()).hasSize(6);
-    assertThat(candidate.getFirstCandidate()).isEqualTo(buffer + "--dir");
+    assertThat(candidate.getCandidates()
+        .stream().map(completion -> completion.getValue().trim()).collect(Collectors.toList()))
+            .containsExactlyInAnyOrder("--dir", "--jar", "--jars", "--group", "--groups");
   }
 
   @Test
@@ -410,7 +413,7 @@ public class GfshParserAutoCompletionIntegrationTest {
     String hintArgument = "data";
     String hintsProvided = gfshParserRule.getCommandManager().obtainHint(hintArgument);
     String[] hintsProvidedArray = hintsProvided.split(lineSeparator());
-    assertThat(hintsProvidedArray.length).isEqualTo(18);
+    assertThat(hintsProvidedArray).hasSize(17);
     assertThat(hintsProvidedArray[0])
         .isEqualTo("User data as stored in regions of the Geode distributed system.");
   }
@@ -420,7 +423,7 @@ public class GfshParserAutoCompletionIntegrationTest {
     String hintArgument = "";
     String hintsProvided = gfshParserRule.getCommandManager().obtainHint(hintArgument);
     String[] hintsProvidedArray = hintsProvided.split(lineSeparator());
-    assertThat(hintsProvidedArray.length).isEqualTo(21);
+    assertThat(hintsProvidedArray).hasSize(21);
     assertThat(hintsProvidedArray[0]).isEqualTo(
         "Hints are available for the following topics. Use \"hint <topic-name>\" for a specific hint.");
   }
@@ -430,7 +433,7 @@ public class GfshParserAutoCompletionIntegrationTest {
     String hintArgument = "fortytwo";
     String hintsProvided = gfshParserRule.getCommandManager().obtainHint(hintArgument);
     String[] hintsProvidedArray = hintsProvided.split(lineSeparator());
-    assertThat(hintsProvidedArray.length).isEqualTo(1);
+    assertThat(hintsProvidedArray).hasSize(1);
     assertThat(hintsProvidedArray[0]).isEqualTo(
         "Unknown topic: " + hintArgument + ". Use hint to view the list of available topics.");
   }

@@ -18,6 +18,7 @@ import static org.apache.geode.distributed.ConfigurationProperties.HTTP_SERVICE_
 import static org.apache.geode.distributed.ConfigurationProperties.JMX_MANAGER_PORT;
 import static org.apache.geode.internal.AvailablePortHelper.getRandomAvailableTCPPorts;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
+import static org.apache.geode.test.dunit.IgnoredException.addIgnoredException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertTrue;
 
@@ -46,6 +47,7 @@ import org.apache.geode.cache.RegionShortcut;
 import org.apache.geode.cache.Scope;
 import org.apache.geode.cache.control.RebalanceOperation;
 import org.apache.geode.cache.control.RebalanceResults;
+import org.apache.geode.cache.persistence.ConflictingPersistentDataException;
 import org.apache.geode.cache.server.CacheServer;
 import org.apache.geode.cache30.CacheSerializableRunnable;
 import org.apache.geode.distributed.DistributedSystem;
@@ -61,7 +63,6 @@ import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.internal.serialization.Version;
 import org.apache.geode.test.dunit.DistributedTestUtils;
 import org.apache.geode.test.dunit.Host;
-import org.apache.geode.test.dunit.IgnoredException;
 import org.apache.geode.test.dunit.Invoke;
 import org.apache.geode.test.dunit.NetworkUtils;
 import org.apache.geode.test.dunit.VM;
@@ -127,14 +128,15 @@ public abstract class RollingUpgradeDUnitTest extends JUnit4DistributedTestCase 
   }
 
   private void deleteWorkingDirFiles() {
-    Invoke.invokeInEveryVM("delete files", () -> deleteVMFiles());
+    Invoke.invokeInEveryVM("delete files", this::deleteVMFiles);
   }
 
   @Override
   public void postSetUp() throws Exception {
     deleteWorkingDirFiles();
-    IgnoredException.addIgnoredException(
-        "cluster configuration service not available|ConflictingPersistentDataException");
+    addIgnoredException("Abandoned because shutdown is in progress");
+    addIgnoredException("cluster configuration service not available");
+    addIgnoredException(ConflictingPersistentDataException.class);
   }
 
   // We start an "old" locator and old servers
@@ -156,7 +158,7 @@ public abstract class RollingUpgradeDUnitTest extends JUnit4DistributedTestCase 
     } else if ((regionType.equals("persistentReplicate"))) {
       shortcutName = RegionShortcut.PARTITION_PERSISTENT.name();
       for (int i = 0; i < testingDirs.length; i++) {
-        testingDirs[i] = new File(diskDir, "diskStoreVM_" + String.valueOf(host.getVM(i).getId()))
+        testingDirs[i] = new File(diskDir, "diskStoreVM_" + host.getVM(i).getId())
             .getAbsoluteFile();
         if (!testingDirs[i].exists()) {
           System.out.println(" Creating diskdir for server: " + i);
@@ -632,7 +634,7 @@ public abstract class RollingUpgradeDUnitTest extends JUnit4DistributedTestCase 
   private static boolean assertEntryExists(Cache cache, String regionName, Object key) {
     assertRegionExists(cache, regionName);
     Region region = getRegion(cache, regionName);
-    if (!region.keySet().contains(key)) {
+    if (!region.containsKey(key)) {
       throw new Error("Entry for key:" + key + " does not exist");
     }
     return true;
@@ -650,8 +652,7 @@ public abstract class RollingUpgradeDUnitTest extends JUnit4DistributedTestCase 
     Object[] enumConstants = aClass.getEnumConstants();
     RegionShortcut shortcut = null;
     int length = enumConstants.length;
-    for (int i = 0; i < length; i++) {
-      Object constant = enumConstants[i];
+    for (Object constant : enumConstants) {
       if (((Enum) constant).name().equals(shortcutName)) {
         shortcut = (RegionShortcut) constant;
         break;
@@ -711,7 +712,7 @@ public abstract class RollingUpgradeDUnitTest extends JUnit4DistributedTestCase 
       stopCacheServers(cache);
       cache.close();
       long startTime = System.currentTimeMillis();
-      await().until(() -> cache.isClosed());
+      await().until(cache::isClosed);
     }
   }
 

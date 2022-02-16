@@ -14,6 +14,8 @@
  */
 package org.apache.geode.cache.client.internal;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.internal.cache.tier.MessageType;
 import org.apache.geode.internal.cache.tier.sockets.Message;
 
@@ -44,11 +46,11 @@ public class TXFailoverOp {
 
     @Override
     public String toString() {
-      return "TXFailoverOp(txId=" + this.txId + ")";
+      return "TXFailoverOp(txId=" + txId + ")";
     }
 
     @Override
-    protected Object processResponse(Message msg) throws Exception {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
       processAck(msg, "txFailover");
       return null;
     }

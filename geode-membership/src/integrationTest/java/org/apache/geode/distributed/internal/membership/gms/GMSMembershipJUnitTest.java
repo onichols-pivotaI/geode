@@ -14,6 +14,8 @@
  */
 package org.apache.geode.distributed.internal.membership.gms;
 
+import static org.apache.geode.distributed.internal.membership.api.LifecycleListener.RECONNECTING.NOT_RECONNECTING;
+import static org.apache.geode.distributed.internal.membership.api.LifecycleListener.RECONNECTING.RECONNECTING;
 import static org.apache.geode.distributed.internal.membership.gms.util.MemberIdentifierUtil.createMemberID;
 import static org.apache.geode.internal.serialization.DataSerializableFixedID.HIGH_PRIORITY_ACKED_MESSAGE;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
@@ -22,11 +24,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Matchers.isA;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,7 +50,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.mockito.Mockito;
+import org.mockito.InOrder;
 
 import org.apache.geode.distributed.internal.membership.api.Authenticator;
 import org.apache.geode.distributed.internal.membership.api.LifecycleListener;
@@ -66,6 +73,7 @@ import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.internal.serialization.Version;
 import org.apache.geode.internal.serialization.Versioning;
 import org.apache.geode.internal.serialization.internal.DSFIDSerializerImpl;
+import org.apache.geode.test.awaitility.GeodeAwaitility;
 import org.apache.geode.test.junit.categories.MembershipTest;
 
 @Category({MembershipTest.class})
@@ -74,7 +82,7 @@ public class GMSMembershipJUnitTest {
   private static final Version OLDER_THAN_CURRENT_VERSION =
       Versioning.getVersion((short) (KnownVersion.CURRENT_ORDINAL - 1));
   private static final Version NEWER_THAN_CURRENT_VERSION =
-      Versioning.getVersion((short) (KnownVersion.CURRENT_ORDINAL + 1));;
+      Versioning.getVersion((short) (KnownVersion.CURRENT_ORDINAL + 1));
   private static final int DEFAULT_PORT = 8888;
 
   private Services services;
@@ -133,7 +141,7 @@ public class GMSMembershipJUnitTest {
     when(stopper.isCancelInProgress()).thenReturn(false);
 
     healthMonitor = mock(HealthMonitor.class);
-    when(healthMonitor.getFailureDetectionPort()).thenReturn(Integer.valueOf(-1));
+    when(healthMonitor.getFailureDetectionPort()).thenReturn(-1);
 
     joinLeave = mock(JoinLeave.class);
 
@@ -166,7 +174,6 @@ public class GMSMembershipJUnitTest {
 
     DSFIDSerializer serializer = new DSFIDSerializerImpl();
     when(services.getSerializer()).thenReturn(serializer);
-    Services.registerSerializables(serializer);
   }
 
   @After
@@ -179,14 +186,14 @@ public class GMSMembershipJUnitTest {
 
   @Test
   public void testSendMessage() throws Exception {
-    services.getSerializer().registerDSFID(HIGH_PRIORITY_ACKED_MESSAGE, TestMessage.class);
+    services.getSerializer().register(HIGH_PRIORITY_ACKED_MESSAGE, TestMessage.class);
     TestMessage m = new TestMessage();
     m.setRecipient(mockMembers[0]);
     manager.getGMSManager().start();
     manager.getGMSManager().started();
     MemberIdentifier myGMSMemberId = myMemberId;
     List<MemberIdentifier> gmsMembers =
-        members.stream().map(x -> ((MemberIdentifier) x)).collect(Collectors.toList());
+        members.stream().map(x -> x).collect(Collectors.toList());
     manager.getGMSManager().installView(new GMSMembershipView<>(myGMSMemberId, 1, gmsMembers));
     MemberIdentifier[] destinations = new MemberIdentifier[] {mockMembers[0]};
     Set<MemberIdentifier> failures =
@@ -197,7 +204,56 @@ public class GMSMembershipJUnitTest {
     }
   }
 
+  @Test
+  public void testForceDisconnectUncleanShutdownDS() throws Exception {
+    final String reason = "For testing";
+    manager = spy(manager);
+    manager.getGMSManager().start();
+    manager.getGMSManager().started();
+    MemberIdentifier myGMSMemberId = myMemberId;
+    List<MemberIdentifier> gmsMembers =
+        members.stream().map(x -> x).collect(Collectors.toList());
+    manager.getGMSManager().installView(new GMSMembershipView<>(myGMSMemberId, 1, gmsMembers));
 
+    GMSMembership.inhibitForcedDisconnectLogging(true);
+    GMSMembership.ManagerImpl managerImpl = (GMSMembership.ManagerImpl) manager.getGMSManager();
+    managerImpl = spy(managerImpl);
+    when(manager.getGMSManager()).thenReturn(managerImpl);
+
+    manager.forceDisconnect(reason);
+    InOrder inOrder = inOrder(managerImpl, directChannelCallback);
+    inOrder.verify(managerImpl, times(1)).uncleanShutdownDS(eq(reason),
+        isA(MemberDisconnectedException.class));
+    inOrder
+        .verify(directChannelCallback, timeout(GeodeAwaitility.getTimeout().getSeconds()).times(1))
+        .forcedDisconnect(eq(reason), eq(NOT_RECONNECTING));
+  }
+
+  @Test
+  public void testForceDisconnectUncleanShutdownReconnectingDS() throws Exception {
+    final String reason = "For testing reconnect";
+    manager = spy(manager);
+    manager.getGMSManager().start();
+    manager.getGMSManager().started();
+    MemberIdentifier myGMSMemberId = myMemberId;
+    List<MemberIdentifier> gmsMembers =
+        members.stream().map(x -> x).collect(Collectors.toList());
+    manager.getGMSManager().installView(new GMSMembershipView<>(myGMSMemberId, 1, gmsMembers));
+
+    GMSMembership.inhibitForcedDisconnectLogging(true);
+    GMSMembership.ManagerImpl managerImpl = (GMSMembership.ManagerImpl) manager.getGMSManager();
+    managerImpl = spy(managerImpl);
+    when(manager.getGMSManager()).thenReturn(managerImpl);
+    when(managerImpl.isReconnectingDS()).thenReturn(true);
+
+    manager.forceDisconnect(reason);
+    InOrder inOrder = inOrder(services, managerImpl, directChannelCallback);
+    inOrder.verify(services, times(1)).setShutdownCause(isA(MemberDisconnectedException.class));
+    inOrder.verify(managerImpl, times(1)).uncleanShutdownReconnectingDS(eq(reason),
+        isA(MemberDisconnectedException.class));
+    inOrder.verify(directChannelCallback, times(1)).forcedDisconnect(eq(reason),
+        eq(RECONNECTING));
+  }
 
   private GMSMembershipView createView(MemberIdentifier creator, int viewId,
       List<MemberIdentifier> members) {
@@ -212,7 +268,7 @@ public class GMSMembershipJUnitTest {
     manager.isJoining = true;
 
     List<MemberIdentifier> viewMembers =
-        Arrays.asList(new MemberIdentifier[] {mockMembers[0], myMemberId});
+        Arrays.asList(mockMembers[0], myMemberId);
     manager.getGMSManager().installView(createView(myMemberId, 2, viewMembers));
 
     // add a surprise member that will be shunned due to it's having
@@ -245,7 +301,7 @@ public class GMSMembershipJUnitTest {
 
     // this view officially adds surpriseMember2
     viewMembers = Arrays
-        .asList(new MemberIdentifier[] {mockMembers[0], myMemberId, surpriseMember2});
+        .asList(mockMembers[0], myMemberId, surpriseMember2);
     manager.handleOrDeferViewEvent(new MembershipView<>(myMemberId, 3, viewMembers));
     assertEquals(4, manager.getStartupEvents().size());
 
@@ -259,8 +315,8 @@ public class GMSMembershipJUnitTest {
     // process a new view after we finish joining but before event processing has started
     manager.isJoining = false;
     mockMembers[4].setVmViewId(4);
-    viewMembers = Arrays.asList(new MemberIdentifier[] {mockMembers[0], myMemberId,
-        surpriseMember2, mockMembers[4]});
+    viewMembers = Arrays.asList(mockMembers[0], myMemberId,
+        surpriseMember2, mockMembers[4]);
     manager.handleOrDeferViewEvent(new MembershipView<>(myMemberId, 4, viewMembers));
     assertEquals(6, manager.getStartupEvents().size());
 
@@ -305,7 +361,7 @@ public class GMSMembershipJUnitTest {
     manager.isJoining = true;
 
     List<MemberIdentifier> viewMembers =
-        Arrays.asList(new MemberIdentifier[] {mockMembers[0], mockMembers[1], myMemberId});
+        Arrays.asList(mockMembers[0], mockMembers[1], myMemberId);
     GMSMembershipView view = createView(myMemberId, 2, viewMembers);
     manager.getGMSManager().installView(view);
     when(services.getJoinLeave().getView()).thenReturn(view);
@@ -318,8 +374,8 @@ public class GMSMembershipJUnitTest {
     manager.checkAddressesForUUIDs(destinations);
     // each destination w/o a UUID should have been replaced with the corresponding
     // ID from the membership view
-    for (int i = 0; i < destinations.length; i++) {
-      assertTrue(destinations[i].hasUUID());
+    for (final MemberIdentifier destination : destinations) {
+      assertTrue(destination.hasUUID());
     }
   }
 
@@ -328,7 +384,7 @@ public class GMSMembershipJUnitTest {
     final Message msg = mock(Message.class);
     when(msg.dropMessageWhenMembershipIsPlayingDead()).thenReturn(true);
 
-    final GMSMembership spy = Mockito.spy(manager);
+    final GMSMembership spy = spy(manager);
 
     spy.beSick();
     spy.getGMSManager().start();

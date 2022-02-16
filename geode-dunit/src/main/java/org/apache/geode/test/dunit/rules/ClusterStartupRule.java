@@ -17,6 +17,7 @@ package org.apache.geode.test.dunit.rules;
 
 import static org.apache.commons.lang3.SystemUtils.isJavaVersionAtLeast;
 import static org.apache.geode.distributed.ConfigurationProperties.GROUPS;
+import static org.apache.geode.internal.AvailablePortHelper.getRandomAvailableTCPPort;
 import static org.apache.geode.test.dunit.Host.getHost;
 import static org.apache.geode.test.dunit.internal.DUnitLauncher.NUM_VMS;
 import static org.apache.geode.test.dunit.internal.DUnitLauncher.closeAndCheckForSuspects;
@@ -41,7 +42,6 @@ import org.apache.geode.cache.server.CacheServer;
 import org.apache.geode.distributed.internal.InternalLocator;
 import org.apache.geode.internal.cache.InternalCache;
 import org.apache.geode.test.dunit.DUnitEnv;
-import org.apache.geode.test.dunit.Host;
 import org.apache.geode.test.dunit.IgnoredException;
 import org.apache.geode.test.dunit.SerializableConsumerIF;
 import org.apache.geode.test.dunit.VM;
@@ -79,21 +79,21 @@ public class ClusterStartupRule implements SerializableTestRule {
 
   public static InternalCache getCache() {
     if (memberStarter == null) {
-      return null;
+      throw new RuntimeException("no cache");
     }
     return memberStarter.getCache();
   }
 
   public static InternalLocator getLocator() {
     if (!(memberStarter instanceof LocatorStarterRule)) {
-      return null;
+      throw new RuntimeException("no locator");
     }
     return ((LocatorStarterRule) memberStarter).getLocator();
   }
 
   public static CacheServer getServer() {
     if (!(memberStarter instanceof ServerStarterRule)) {
-      return null;
+      throw new RuntimeException("no server");
     }
     return ((ServerStarterRule) memberStarter).getServer();
   }
@@ -127,7 +127,7 @@ public class ClusterStartupRule implements SerializableTestRule {
 
   public static ClientCache getClientCache() {
     if (clientCacheRule == null) {
-      return null;
+      throw new RuntimeException("no client cache");
     }
     return clientCacheRule.getCache();
   }
@@ -136,7 +136,7 @@ public class ClusterStartupRule implements SerializableTestRule {
    * this will allow all the logs go into log files instead of going into the console output
    */
   public ClusterStartupRule withLogFile() {
-    this.logFile = true;
+    logFile = true;
     return this;
   }
 
@@ -160,10 +160,8 @@ public class ClusterStartupRule implements SerializableTestRule {
       // GEODE-6247: JDK 11 has an issue where native code is reporting committed is 2MB > max.
       IgnoredException.addIgnoredException("committed = 538968064 should be < max = 536870912");
     }
-    DUnitLauncher.launchIfNeeded(launchDunitLocator);
-    for (int i = 0; i < vmCount; i++) {
-      Host.getHost(0).getVM(i);
-    }
+    DUnitLauncher.launchIfNeeded(vmCount, false);
+
     restoreSystemProperties.beforeDistributedTest(description);
     occupiedVMs = new HashMap<>();
   }
@@ -185,12 +183,12 @@ public class ClusterStartupRule implements SerializableTestRule {
     // stop all the members in the order of clients, servers and locators
     List<VMProvider> vms = new ArrayList<>();
     vms.addAll(
-        occupiedVMs.values().stream().filter(x -> x.isClient()).collect(Collectors.toSet()));
+        occupiedVMs.values().stream().filter(VMProvider::isClient).collect(Collectors.toSet()));
     vms.addAll(
-        occupiedVMs.values().stream().filter(x -> x.isServer()).collect(Collectors.toSet()));
+        occupiedVMs.values().stream().filter(VMProvider::isServer).collect(Collectors.toSet()));
     vms.addAll(
-        occupiedVMs.values().stream().filter(x -> x.isLocator()).collect(Collectors.toSet()));
-    vms.forEach(x -> x.stop());
+        occupiedVMs.values().stream().filter(VMProvider::isLocator).collect(Collectors.toSet()));
+    vms.forEach(VMProvider::stop);
 
     // delete any file under root dir
     Arrays.stream(getWorkingDirRoot().listFiles()).filter(File::isFile)
@@ -230,12 +228,19 @@ public class ClusterStartupRule implements SerializableTestRule {
   }
 
   public MemberVM startLocatorVM(int index, String version) {
-    return startLocatorVM(index, 0, version, x -> x);
+    int port = getRandomAvailableTCPPort();
+    return startLocatorVM(index, port, version, x -> x);
   }
 
   public MemberVM startLocatorVM(int index,
       SerializableFunction<LocatorStarterRule> ruleOperator) {
-    return startLocatorVM(index, 0, VersionManager.CURRENT_VERSION, ruleOperator);
+    int port = getRandomAvailableTCPPort();
+    // Use compose() to put our action at the front of the operator. That way, if the ruleOperator
+    // also sets a port, that action will override ours, and the locator will use the port specified
+    // by ruleOperator.
+    SerializableFunction<LocatorStarterRule> ruleOperatorWithPort =
+        ruleOperator.compose(x -> x.withPort(port));
+    return startLocatorVM(index, 0, VersionManager.CURRENT_VERSION, ruleOperatorWithPort);
   }
 
   public MemberVM startLocatorVM(int index, int port, String version,

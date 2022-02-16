@@ -15,6 +15,8 @@
 
 package org.apache.geode.internal.lang;
 
+import static java.lang.System.lineSeparator;
+
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
@@ -33,9 +35,9 @@ import org.apache.geode.internal.cache.Token;
 @Deprecated
 public class StringUtils extends org.apache.commons.lang3.StringUtils {
 
-  public static final String COMMA_DELIMITER = ",";
-  public static final String LINE_SEPARATOR = System.getProperty("line.separator");
-  public static final String SPACE = " ";
+  static final String COMMA_DELIMITER = ",";
+  static final String LINE_SEPARATOR = lineSeparator();
+  static final String SPACE = " ";
 
   private static final int MAX_ARRAY_ELEMENTS_TO_CONVERT =
       Integer.getInteger("StringUtils.MAX_ARRAY_ELEMENTS_TO_CONVERT", 16);
@@ -123,7 +125,7 @@ public class StringUtils extends org.apache.commons.lang3.StringUtils {
       // throws IndexOutOfBoundsException if spaceIndex is -1, implying no word boundary was found
       // within
       // the given width; this also avoids the infinite loop
-      buffer.append(line.substring(0, spaceIndex));
+      buffer.append(line, 0, spaceIndex);
       buffer.append(LINE_SEPARATOR);
       // possible infinite loop if spaceIndex is -1, see comment above
       line = line.substring(spaceIndex + 1);
@@ -227,7 +229,7 @@ public class StringUtils extends org.apache.commons.lang3.StringUtils {
     b.append(componentType.getSimpleName());
     b.append('[');
     for (int i = 0;; i++) {
-      b.append(String.valueOf(a[i]));
+      b.append(a[i]);
       if (i == iMax) {
         int skipCount = a.length - maxArrayElements;
         if (skipCount > 0) {

@@ -15,6 +15,8 @@
 
 package org.apache.geode.cache.client.internal;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.GemFireException;
 import org.apache.geode.cache.CommitConflictException;
 import org.apache.geode.cache.SynchronizationCommitConflictException;
@@ -32,7 +34,7 @@ import org.apache.geode.internal.cache.tier.sockets.Part;
  */
 public class TXSynchronizationOp {
 
-  public static enum CompletionType {
+  public enum CompletionType {
     BEFORE_COMPLETION, AFTER_COMPLETION
   }
 
@@ -51,8 +53,8 @@ public class TXSynchronizationOp {
 
   static class Impl extends AbstractOp {
 
-    private int status;
-    private CompletionType type;
+    private final int status;
+    private final CompletionType type;
     TXCommitMessage tXCommitMessageResponse;
 
     public Impl(int status, int txId, CompletionType type) {
@@ -69,7 +71,7 @@ public class TXSynchronizationOp {
     @Override
     public String toString() {
       return "TXSynchronization(threadTxId=" + TXManagerImpl.getCurrentTXUniqueId() + "; "
-          + this.type + "; status=" + this.status + ")";
+          + type + "; status=" + status + ")";
     }
 
     @Override
@@ -99,8 +101,8 @@ public class TXSynchronizationOp {
      * cache.tier.sockets.Message)
      */
     @Override
-    protected Object processResponse(Message msg) throws Exception {
-      if (this.type == CompletionType.BEFORE_COMPLETION) {
+    protected Object processResponse(final @NotNull Message msg) throws Exception {
+      if (type == CompletionType.BEFORE_COMPLETION) {
         try {
           processAck(msg, type.toString());
         } catch (ServerOperationException e) {
@@ -110,8 +112,8 @@ public class TXSynchronizationOp {
         }
         return null;
       } else {
-        TXCommitMessage rcs = (TXCommitMessage) processObjResponse(msg, this.type.toString());
-        this.tXCommitMessageResponse = rcs;
+        TXCommitMessage rcs = (TXCommitMessage) processObjResponse(msg, type.toString());
+        tXCommitMessageResponse = rcs;
         return rcs;
       }
     }

@@ -14,6 +14,8 @@
  */
 package org.apache.geode.cache30;
 
+import static org.apache.geode.internal.JvmSizeUtils.getObjectHeaderSize;
+import static org.apache.geode.internal.JvmSizeUtils.roundUpSize;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -81,7 +83,7 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
 
     int threshold = 4;
 
-    final String name = this.getUniqueName();
+    final String name = getUniqueName();
     AttributesFactory factory = new AttributesFactory();
     factory.setScope(Scope.LOCAL);
     factory.setEvictionAttributes(EvictionAttributes.createLRUMemoryAttributes(threshold));
@@ -99,17 +101,17 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
     EvictionCounters lruStats = getLRUStats(region);
     assertNotNull(lruStats);
 
-    String sampleKey = new String("10000");
-    int stringSize = JvmSizeUtils.getObjectHeaderSize() // String object
+    String sampleKey = "10000";
+    int stringSize = getObjectHeaderSize() // String object
         + (2 * 4) + JvmSizeUtils.getReferenceSize(); // 2 ints and a reference on a string
-    stringSize = (int) ReflectionSingleObjectSizer.roundUpSize(stringSize);
+    stringSize = roundUpSize(stringSize);
 
-    int charArraySize = sampleKey.length() * 2 + JvmSizeUtils.getObjectHeaderSize() // char array
-                                                                                    // object
+    int charArraySize = sampleKey.length() * 2 + getObjectHeaderSize() // char array
+                                                                       // object
         + 4; // length of char array
-    charArraySize = (int) ReflectionSingleObjectSizer.roundUpSize(charArraySize);
+    charArraySize = roundUpSize(charArraySize);
     assertEquals(stringSize, ReflectionSingleObjectSizer.sizeof(String.class));
-    assertEquals(ReflectionSingleObjectSizer.roundUpSize(JvmSizeUtils.getObjectHeaderSize() + 4),
+    assertEquals(roundUpSize(getObjectHeaderSize() + 4),
         (new ReflectionSingleObjectSizer()).sizeof(new char[0]));
     assertEquals(charArraySize, (new ReflectionSingleObjectSizer()).sizeof(new char[5]));
 
@@ -119,9 +121,9 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
     // now that keys are inlined the keySize is 0
     keySize = 0;
     byte[] sampleValue = new byte[1000];
-    int valueSize = sampleValue.length + JvmSizeUtils.getObjectHeaderSize() // byte array object;
+    int valueSize = sampleValue.length + getObjectHeaderSize() // byte array object;
         + 4; // length of byte array
-    valueSize = (int) ReflectionSingleObjectSizer.roundUpSize(valueSize);
+    valueSize = roundUpSize(valueSize);
     int entrySize = keySize + valueSize + getEntryOverhead(region);
     assertEquals(valueSize, ObjectSizer.DEFAULT.sizeof(sampleValue));
 
@@ -149,7 +151,7 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
   public void testSizeClassesOnce() throws CacheException {
     int threshold = 4;
 
-    final String name = this.getUniqueName();
+    final String name = getUniqueName();
     AttributesFactory factory = new AttributesFactory();
     factory.setScope(Scope.LOCAL);
     factory.setEvictionAttributes(EvictionAttributes.createLRUMemoryAttributes(threshold));
@@ -188,7 +190,7 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
    */
   @Test
   public void testEntryOverHead() throws Exception {
-    final String name = this.getUniqueName();
+    final String name = getUniqueName();
     AttributesFactory factory = new AttributesFactory();
     factory.setScope(Scope.LOCAL);
     factory.setEvictionAttributes(EvictionAttributes.createLRUMemoryAttributes(50));
@@ -206,7 +208,7 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
    * @since GemFire 5.0
    */
   class CustomObjectSizer implements ObjectSizer {
-    private int dataSize;
+    private final int dataSize;
 
     private boolean wasCalled = false;
 
@@ -216,12 +218,12 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
 
     @Override
     public int sizeof(Object o) {
-      this.wasCalled = true;
+      wasCalled = true;
       return dataSize;
     }
 
     public boolean wasCalled() {
-      return this.wasCalled;
+      return wasCalled;
     }
   }
 
@@ -232,7 +234,7 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
    */
   @Test
   public void testCustomObjectSizer() throws Exception {
-    final String name = this.getUniqueName();
+    final String name = getUniqueName();
     final int entrySize = 1024 * 1024;
     final int numEntries = 3;
     AttributesFactory factory = new AttributesFactory();
@@ -245,7 +247,7 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
       // changed to a boolean[] because byte[] does not cause a call to ObjectSizer.sizeof
       // What was calling it before was the key object. But now that keys are inlined we
       // no longer call ObjectSizer.sizeof for the key.
-      r.put(new Integer(size), new boolean[entrySize]);
+      r.put(size, new boolean[entrySize]);
     }
     assertTrue("ObjectSizer was not triggered", cs.wasCalled());
     long actualSize = getLRUStats(r).getCounter();
@@ -263,7 +265,7 @@ public class MemLRUEvictionControllerDUnitTest extends JUnit4CacheTestCase {
     private final byte[] field;
 
     public TestObject(int size) {
-      this.field = new byte[size];
+      field = new byte[size];
     }
   }
 }

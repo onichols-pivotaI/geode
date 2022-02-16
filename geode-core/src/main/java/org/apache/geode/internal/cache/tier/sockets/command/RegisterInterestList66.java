@@ -14,10 +14,15 @@
  */
 package org.apache.geode.internal.cache.tier.sockets.command;
 
+import static org.apache.geode.util.internal.UncheckedUtils.uncheckedCast;
+
 import java.io.IOException;
 import java.util.List;
 
+import org.jetbrains.annotations.NotNull;
+
 import org.apache.geode.annotations.Immutable;
+import org.apache.geode.cache.DataPolicy;
 import org.apache.geode.cache.DynamicRegionFactory;
 import org.apache.geode.cache.InterestResultPolicy;
 import org.apache.geode.cache.operations.RegisterInterestOperationContext;
@@ -33,7 +38,6 @@ import org.apache.geode.internal.cache.tier.sockets.Part;
 import org.apache.geode.internal.cache.tier.sockets.ServerConnection;
 import org.apache.geode.internal.security.AuthorizeRequest;
 import org.apache.geode.internal.security.SecurityService;
-import org.apache.geode.internal.serialization.KnownVersion;
 import org.apache.geode.security.ResourcePermission.Operation;
 import org.apache.geode.security.ResourcePermission.Resource;
 
@@ -56,12 +60,13 @@ public class RegisterInterestList66 extends BaseCommand {
   RegisterInterestList66() {}
 
   @Override
-  public void cmdExecute(Message clientMessage, ServerConnection serverConnection,
-      SecurityService securityService, long start) throws IOException, InterruptedException {
+  public void cmdExecute(final @NotNull Message clientMessage,
+      final @NotNull ServerConnection serverConnection,
+      final @NotNull SecurityService securityService, final long start)
+      throws IOException, InterruptedException {
     Part regionNamePart;
     String regionName;
     Object key = null;
-    InterestResultPolicy policy;
     List<Object> keys;
     int numberOfKeys, partNumber;
     serverConnection.setAsTrue(REQUIRES_RESPONSE);
@@ -72,6 +77,7 @@ public class RegisterInterestList66 extends BaseCommand {
     regionName = regionNamePart.getCachedString();
 
     // Retrieve the InterestResultPolicy
+    final InterestResultPolicy policy;
     try {
       policy = (InterestResultPolicy) clientMessage.getPart(1).getObject();
     } catch (Exception e) {
@@ -79,6 +85,7 @@ public class RegisterInterestList66 extends BaseCommand {
       serverConnection.setAsTrue(RESPONDED);
       return;
     }
+
     boolean isDurable;
     try {
       Part durablePart = clientMessage.getPart(2);
@@ -89,16 +96,14 @@ public class RegisterInterestList66 extends BaseCommand {
       serverConnection.setAsTrue(RESPONDED);
       return;
     }
-    // region data policy
-    byte[] regionDataPolicyPartBytes;
-    boolean serializeValues = false;
+
+    final DataPolicy regionDataPolicy;
+    final boolean serializeValues;
     try {
-      Part regionDataPolicyPart = clientMessage.getPart(clientMessage.getNumberOfParts() - 1);
-      regionDataPolicyPartBytes = (byte[]) regionDataPolicyPart.getObject();
-      if (serverConnection.getClientVersion().isNotOlderThan(KnownVersion.GFE_80)) {
-        // The second byte here is serializeValues
-        serializeValues = regionDataPolicyPartBytes[1] == (byte) 0x01;
-      }
+      final Part regionDataPolicyPart = clientMessage.getPart(clientMessage.getNumberOfParts() - 1);
+      final byte[] regionDataPolicyPartBytes = (byte[]) regionDataPolicyPart.getObject();
+      regionDataPolicy = DataPolicy.fromOrdinal(regionDataPolicyPartBytes[0]);
+      serializeValues = regionDataPolicyPartBytes[1] == (byte) 0x01;
     } catch (Exception e) {
       writeChunkedException(clientMessage, e, serverConnection);
       serverConnection.setAsTrue(RESPONDED);
@@ -108,7 +113,7 @@ public class RegisterInterestList66 extends BaseCommand {
     partNumber = 3;
     Part list = clientMessage.getPart(partNumber);
     try {
-      keys = (List<Object>) list.getObject();
+      keys = uncheckedCast(list.getObject());
       numberOfKeys = keys.size();
     } catch (Exception e) {
       writeChunkedException(clientMessage, e, serverConnection);
@@ -136,14 +141,14 @@ public class RegisterInterestList66 extends BaseCommand {
 
     // Process the register interest request
     if (keys.isEmpty() || regionName == null) {
-      String errMessage = null;
+      final String errMessage;
       if (keys.isEmpty() && regionName == null) {
         errMessage =
             "The input list of keys is empty and the input region name is null for the register interest request.";
       } else if (keys.isEmpty()) {
         errMessage =
             "The input list of keys for the register interest request is empty.";
-      } else if (regionName == null) {
+      } else {
         errMessage =
             "The input region name for the register interest request is null.";
       }
@@ -166,13 +171,13 @@ public class RegisterInterestList66 extends BaseCommand {
         if (!DynamicRegionFactory.regionIsDynamicRegionList(regionName)) {
           RegisterInterestOperationContext registerContext =
               authorizeRequest.registerInterestListAuthorize(regionName, keys, policy);
-          keys = (List<Object>) registerContext.getKey();
+          keys = uncheckedCast(registerContext.getKey());
         }
       }
       // Register interest
       serverConnection.getAcceptor().getCacheClientNotifier().registerClientInterest(regionName,
           keys, serverConnection.getProxyID(), isDurable, sendUpdatesAsInvalidates, true,
-          regionDataPolicyPartBytes[0], true);
+          regionDataPolicy, true);
     } catch (Exception ex) {
       // If an interrupted exception is thrown , rethrow it
       checkForInterrupt(serverConnection, ex);

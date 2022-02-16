@@ -46,7 +46,6 @@ public class ListDeployedCommand extends GfshCommand {
   @CliMetaData(relatedTopic = {CliStrings.TOPIC_GEODE_CONFIG})
   @ResourceOperation(resource = ResourcePermission.Resource.CLUSTER,
       operation = ResourcePermission.Operation.READ)
-  @SuppressWarnings("unchecked")
   public ResultModel listDeployed(@CliOption(key = {CliStrings.GROUP, CliStrings.GROUPS},
       help = CliStrings.LIST_DEPLOYED__GROUP__HELP) String[] group) {
 
@@ -58,13 +57,12 @@ public class ListDeployedCommand extends GfshCommand {
     ResultModel result = new ResultModel();
     TabularResultModel tabularData = result.addTable("jars");
 
-    List<CliFunctionResult> functionResults = executeAndGetFunctionResult(this.listDeployedFunction,
+    List<CliFunctionResult> functionResults = executeAndGetFunctionResult(listDeployedFunction,
         null, targetMembers);
 
     DeploymentInfoTableUtil.writeDeploymentInfoToTable(
-        new String[] {"Member", "Deployment Name", "JAR", "JAR Location"}, tabularData,
-        DeploymentInfoTableUtil
-            .getDeploymentInfoFromFunctionResults(functionResults));
+        new String[] {"Member", "JAR", "JAR Location"}, tabularData,
+        DeploymentInfoTableUtil.getDeploymentInfoFromFunctionResults(functionResults));
 
     if (tabularData.getRowSize() == 0) {
       return ResultModel.createInfo(CliStrings.LIST_DEPLOYED__NO_JARS_FOUND_MESSAGE);
